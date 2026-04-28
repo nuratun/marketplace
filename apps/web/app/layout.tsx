@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google"
+import { IBM_Plex_Sans_Arabic } from "next/font/google"
 import "@/app/globals.css"
+import Navbar from "@/components/navbar"
+import Footer from "@/components/footer"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"]
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"]
+const arabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-arabic",
 })
 
 export const metadata: Metadata = {
-  title: "Shamna",
-  description: "Classified marketplace for the Syrian market"
+  title: "ماركت - الموقع السوري للإعلانات",
+  description: "موقع الإعلانات المبوبة في سوريا",
 }
 
 export default function RootLayout({
@@ -26,9 +24,17 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${arabic.variable} font-sans antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body
+        className={`${arabic.variable} font-sans antialiased min-h-screen flex flex-col`}
+      >
+        <Navbar />
+        <main className="flex-1">
+          {children}
+        </main>
+        <Footer />
+      </body>
     </html>
   );
 }
