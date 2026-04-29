@@ -1,11 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Search, PlusCircle, User } from "lucide-react"
 import { useState } from "react"
 
 export default function Navbar() {
   const [query, setQuery] = useState("")
+  const pathname = usePathname()
 
   return (
     <header
@@ -56,7 +58,7 @@ export default function Navbar() {
           </Link>
 
           <Link
-            href="/auth"
+            href={`/auth?from=${pathname}`}
             className="flex items-center gap-2 px-4 h-10 rounded-lg text-sm font-medium transition-colors"
             style={{
               border: "1px solid var(--color-border)",
