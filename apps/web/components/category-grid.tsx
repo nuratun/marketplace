@@ -11,14 +11,8 @@ const categories = [
 
 export default function CategoryGrid() {
   return (
-    <section
-      className="max-w-6xl mx-auto px-4 py-10"
-      style={{ fontFamily: "var(--font-arabic)" }}
-    >
-      <h2
-        className="text-base font-semibold mb-4"
-        style={{ color: "var(--color-text-primary)" }}
-      >
+    <section className="max-w-6xl mx-auto px-4 py-6" style={{ fontFamily: "var(--font-arabic)" }}>
+      <h2 className="text-base font-semibold mb-4" style={{ color: "var(--color-text-primary)" }}>
         تصفح حسب الفئة
       </h2>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">

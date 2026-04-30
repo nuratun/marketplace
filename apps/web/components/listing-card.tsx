@@ -1,15 +1,5 @@
 import Link from "next/link"
-
-export type Listing = {
-  id: string
-  title: string
-  price: number
-  currency: string
-  city: string
-  category: string
-  created_at: string
-  thumbnail?: string
-}
+import { type Listing } from "@/types/listing"
 
 const categoryIcons: Record<string, { icon: string; color: string }> = {
   "real-estate": { icon: "🏠", color: "#FFF0E6" },
@@ -18,6 +8,15 @@ const categoryIcons: Record<string, { icon: string; color: string }> = {
   furniture: { icon: "🛋️", color: "#FFF8E6" },
   clothing: { icon: "👗", color: "#F9E6FF" },
   jobs: { icon: "💼", color: "#E6FFF6" },
+}
+
+const categoryLabels: Record<string, string> = {
+  "real-estate": "عقارات",
+  cars: "سيارات",
+  electronics: "إلكترونيات",
+  furniture: "أثاث ومنزل",
+  clothing: "ملابس",
+  jobs: "وظائف وخدمات",
 }
 
 function timeAgo(dateStr: string) {
@@ -40,24 +39,26 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         fontFamily: "var(--font-arabic)",
       }}
     >
-      {/* Image / placeholder */}
       <div
         className="h-36 flex items-center justify-center text-4xl"
-        style={{ background: listing.thumbnail ? undefined : meta.color }}
+        style={{ background: listing.image_urls[0] ? undefined : meta.color }}
       >
-        {listing.thumbnail ? (
-          <img src={listing.thumbnail} alt={listing.title} className="w-full h-full object-cover" />
+        {listing.image_urls[0] ? (
+          <img
+            src={listing.image_urls[0]}
+            alt={listing.title}
+            className="w-full h-full object-cover"
+          />
         ) : (
           meta.icon
         )}
       </div>
-
       <div className="p-3">
         <span
           className="inline-block text-xs px-2 py-0.5 rounded-full mb-1"
           style={{ background: "#F5EDE6", color: "#8C4420" }}
         >
-          {listing.category}
+          {categoryLabels[listing.category] ?? listing.category}
         </span>
         <p
           className="text-sm font-medium truncate"
@@ -69,7 +70,7 @@ export default function ListingCard({ listing }: { listing: Listing }) {
           className="text-sm font-semibold mt-1"
           style={{ color: "var(--color-brand)" }}
         >
-          {listing.price.toLocaleString("en-US")} {listing.currency}
+          {listing.price.toLocaleString("ar-SY")} {listing.currency}
         </p>
         <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
           {listing.city} · {timeAgo(listing.created_at)}

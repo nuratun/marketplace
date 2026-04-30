@@ -1,38 +1,20 @@
 import { Suspense } from "react"
+import { notFound } from "next/navigation"
 import Link from "next/link"
+import { apiFetch } from "@/lib/api"
+import { type Listing, type ListingsResponse } from "@/types/listing"
 import ListingGallery from "@/components/listing-gallery"
 import PhoneReveal from "@/components/phone-reveal"
 import ReportButton from "@/components/report-button"
-import ListingCard, { type Listing } from "@/components/listing-card"
+import ListingCard from "@/components/listing-card"
 
-// Mock data — replace with apiFetch(`/listings/${id}`) once API is ready
-const MOCK: Listing & {
-  description: string
-  condition: string
-  views: number
-  seller: { name: string; memberSince: string }
-  images: string[]
-  similar: Listing[]
-} = {
-  id: "1",
-  title: "آيفون ١٥ برو ماكس ٢٥٦ جيجا",
-  price: 850,
-  currency: "د.أ",
-  city: "دمشق",
-  category: "electronics",
-  created_at: new Date(Date.now() - 3 * 3600000).toISOString(),
-  condition: "جديد",
-  views: 124,
-  description:
-    "آيفون ١٥ برو ماكس بحالة ممتازة، اشتريته من السعودية قبل شهرين. معه كرتونه الأصلي وكابل الشحن. البطارية ٩٨٪. لون تيتانيوم الطبيعي. السعر غير قابل للتفاوض.",
-  seller: { name: "أحمد الخطيب", memberSince: "يناير ٢٠٢٤" },
-  images: [],
-  similar: [
-    { id: "2", title: "آيفون ١٤ برو", price: 650, currency: "د.أ", city: "دمشق", category: "electronics", created_at: new Date(Date.now() - 86400000).toISOString() },
-    { id: "3", title: "سامسونج S24 Ultra", price: 780, currency: "د.أ", city: "حلب", category: "electronics", created_at: new Date(Date.now() - 172800000).toISOString() },
-    { id: "4", title: "بيكسل ٨ برو", price: 700, currency: "د.أ", city: "دمشق", category: "electronics", created_at: new Date(Date.now() - 259200000).toISOString() },
-    { id: "5", title: "ون بلس ١٢", price: 520, currency: "د.أ", city: "حمص", category: "electronics", created_at: new Date(Date.now() - 345600000).toISOString() },
-  ],
+const categoryLabels: Record<string, string> = {
+  "real-estate": "عقارات",
+  cars: "سيارات",
+  electronics: "إلكترونيات",
+  furniture: "أثاث ومنزل",
+  clothing: "ملابس",
+  jobs: "وظائف وخدمات"
 }
 
 function timeAgo(dateStr: string) {
@@ -42,14 +24,15 @@ function timeAgo(dateStr: string) {
   return `منذ ${Math.floor(h / 24)} يوم`
 }
 
-function getInitials(name: string) {
+function getInitials(name: string | null) {
+  if (!name) return "؟"
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2)
 }
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`rounded-xl p-4 mb-4 ${className}`}
+      className="rounded-xl p-4 mb-4"
       style={{ background: "#fff", border: "1px solid var(--color-border)" }}
     >
       {children}
@@ -59,21 +42,39 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className="text-xs mb-3 font-medium"
-      style={{ color: "var(--color-text-muted)" }}
-    >
+    <p className="text-xs mb-3 font-medium" style={{ color: "var(--color-text-muted)" }}>
       {children}
     </p>
   )
 }
 
-export default function ListingDetailPage({
+const conditionLabels: Record<string, string> = {
+  new: "جديد",
+  used: "مستعمل",
+}
+
+export default async function ListingDetailPage({
   params,
 }: {
   params: { id: string }
 }) {
-  const listing = MOCK // replace with await apiFetch(...)
+  let listing: Listing
+  let similar: Listing[] = []
+
+  try {
+    listing = await apiFetch<Listing>(`/listings/${params.id}`)
+  } catch {
+    notFound()
+  }
+
+  try {
+    const similarData = await apiFetch<ListingsResponse>(
+      `/listings?category=${listing.category}&limit=4`
+    )
+    similar = similarData.results.filter((l) => l.id !== listing.id).slice(0, 4)
+  } catch {
+    similar = []
+  }
 
   return (
     <div
@@ -88,15 +89,14 @@ export default function ListingDetailPage({
           href={`/category/${listing.category}`}
           style={{ color: "var(--color-text-muted)" }}
         >
-          {listing.category}
+          {categoryLabels[listing.category] ?? listing.category}
         </Link>
         {" · "}
         <span style={{ color: "var(--color-brand)" }}>{listing.title}</span>
       </p>
 
-      {/* Gallery */}
       <Suspense>
-        <ListingGallery images={listing.images} />
+        <ListingGallery images={listing.image_urls} />
       </Suspense>
 
       {/* Title + price */}
@@ -105,7 +105,7 @@ export default function ListingDetailPage({
           className="inline-block text-xs px-2 py-0.5 rounded-full mb-2"
           style={{ background: "#E6FAF0", color: "#0F6E56" }}
         >
-          {listing.condition}
+          {conditionLabels[listing.condition] ?? listing.condition}
         </span>
         <h1
           className="text-xl font-semibold mb-1"
@@ -113,16 +113,10 @@ export default function ListingDetailPage({
         >
           {listing.title}
         </h1>
-        <p
-          className="text-2xl font-bold mb-3"
-          style={{ color: "var(--color-brand)" }}
-        >
-          {listing.price.toLocaleString("en-US")} {listing.currency}
+        <p className="text-2xl font-bold mb-3" style={{ color: "var(--color-brand)" }}>
+          {listing.price.toLocaleString("ar-SY")} {listing.currency}
         </p>
-        <div
-          className="flex gap-4 text-xs"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+        <div className="flex gap-4 text-xs" style={{ color: "var(--color-text-muted)" }}>
           <span>📍 {listing.city}</span>
           <span>🕐 {timeAgo(listing.created_at)}</span>
           <span>👁 {listing.views} مشاهدة</span>
@@ -132,10 +126,7 @@ export default function ListingDetailPage({
       {/* Description */}
       <Card>
         <SectionLabel>الوصف</SectionLabel>
-        <p
-          className="text-sm leading-relaxed"
-          style={{ color: "var(--color-text-primary)" }}
-        >
+        <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-primary)" }}>
           {listing.description}
         </p>
       </Card>
@@ -151,14 +142,11 @@ export default function ListingDetailPage({
             {getInitials(listing.seller.name)}
           </div>
           <div>
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              {listing.seller.name}
+            <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+              {listing.seller.name ?? "مستخدم شامنا"}
             </p>
             <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-              عضو منذ {listing.seller.memberSince}
+              عضو منذ {listing.seller.member_since}
             </p>
           </div>
         </div>
@@ -171,16 +159,13 @@ export default function ListingDetailPage({
       {/* Location */}
       <Card>
         <SectionLabel>الموقع</SectionLabel>
-        <p
-          className="text-sm"
-          style={{ color: "var(--color-text-primary)" }}
-        >
+        <p className="text-sm" style={{ color: "var(--color-text-primary)" }}>
           📍 {listing.city}، سوريا
         </p>
       </Card>
 
       {/* Similar listings */}
-      {listing.similar.length > 0 && (
+      {similar.length > 0 && (
         <div className="mt-6">
           <h2
             className="text-base font-semibold mb-4"
@@ -189,9 +174,7 @@ export default function ListingDetailPage({
             إعلانات مشابهة
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {listing.similar.map((l) => (
-              <ListingCard key={l.id} listing={l} />
-            ))}
+            {similar.map((l) => <ListingCard key={l.id} listing={l} />)}
           </div>
         </div>
       )}

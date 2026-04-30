@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, Suspense } from "react"
-import { useParams } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useParams, useSearchParams } from "next/navigation"
+import { apiFetch } from "@/lib/api"
+import { type Listing, type ListingsResponse } from "@/types/listing"
 import CategoryFilters from "@/components/category-filters"
 import ViewToggle from "@/components/view-toggle"
-import ListingCard, { type Listing } from "@/components/listing-card"
+import ListingCard from "@/components/listing-card"
 import ListingListCard from "@/components/listing-list-card"
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -13,24 +15,35 @@ const CATEGORY_LABELS: Record<string, string> = {
   electronics: "إلكترونيات",
   furniture: "أثاث ومنزل",
   clothing: "ملابس",
-  jobs: "وظائف وخدمات"
+  jobs: "وظائف وخدمات",
 }
-
-const MOCK_LISTINGS: Listing[] = [
-  { id: "1", title: "آيفون ١٥ برو ماكس", price: 850, currency: "د.أ", city: "دمشق", category: "electronics", created_at: new Date(Date.now() - 3 * 3600000).toISOString() },
-  { id: "2", title: "ماك بوك برو M3", price: 1400, currency: "د.أ", city: "حلب", category: "electronics", created_at: new Date(Date.now() - 5 * 3600000).toISOString() },
-  { id: "3", title: "شاشة سامسونج ٢٧ بوصة", price: 220, currency: "د.أ", city: "دمشق", category: "electronics", created_at: new Date(Date.now() - 24 * 3600000).toISOString() },
-  { id: "4", title: "بلايستيشن ٥", price: 650, currency: "د.أ", city: "حمص", category: "electronics", created_at: new Date(Date.now() - 48 * 3600000).toISOString() },
-  { id: "5", title: "سماعات سوني WH-1000XM5", price: 180, currency: "د.أ", city: "اللاذقية", category: "electronics", created_at: new Date(Date.now() - 72 * 3600000).toISOString() },
-  { id: "6", title: "آيباد برو ١٢.٩", price: 950, currency: "د.أ", city: "دمشق", category: "electronics", created_at: new Date(Date.now() - 96 * 3600000).toISOString() }
-]
 
 type View = "grid" | "list"
 
 function CategoryPageInner() {
   const { slug } = useParams<{ slug: string }>()
+  const searchParams = useSearchParams()
   const [view, setView] = useState<View>("grid")
+  const [data, setData] = useState<ListingsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+
   const label = CATEGORY_LABELS[slug] ?? slug
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    params.set("category", slug)
+    if (searchParams.get("condition")) params.set("condition", searchParams.get("condition")!)
+    if (searchParams.get("city")) params.set("city", searchParams.get("city")!)
+    if (searchParams.get("min")) params.set("min_price", searchParams.get("min")!)
+    if (searchParams.get("max")) params.set("max_price", searchParams.get("max")!)
+    if (searchParams.get("sort")) params.set("sort", searchParams.get("sort")!)
+
+    apiFetch<ListingsResponse>(`/listings?${params.toString()}`)
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [slug, searchParams])
 
   return (
     <div
@@ -44,37 +57,36 @@ function CategoryPageInner() {
         <span style={{ color: "var(--color-brand)" }}>{label}</span>
       </p>
 
-      {/* Header row */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1
-            className="text-xl font-semibold"
-            style={{ color: "var(--color-text-primary)" }}
-          >
+          <h1 className="text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
             {label}
           </h1>
           <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-            {MOCK_LISTINGS.length} إعلان
+            {data ? `${data.total} إعلان` : "..."}
           </p>
         </div>
         <ViewToggle view={view} onChange={setView} />
       </div>
 
-      {/* Filters */}
       <CategoryFilters />
 
-      {/* Listings */}
-      {view === "grid" ? (
+      {loading ? (
+        <div className="text-center py-16" style={{ color: "var(--color-text-muted)" }}>
+          جاري التحميل...
+        </div>
+      ) : !data?.results.length ? (
+        <div className="text-center py-16" style={{ color: "var(--color-text-muted)" }}>
+          لا توجد إعلانات في هذه الفئة
+        </div>
+      ) : view === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {MOCK_LISTINGS.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
+          {data.results.map((l) => <ListingCard key={l.id} listing={l} />)}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {MOCK_LISTINGS.map((l) => (
-            <ListingListCard key={l.id} listing={l} />
-          ))}
+          {data.results.map((l) => <ListingListCard key={l.id} listing={l} />)}
         </div>
       )}
     </div>

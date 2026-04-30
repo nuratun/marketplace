@@ -1,19 +1,24 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
-
-if (!API_BASE_URL) {
-  throw new Error("NEXT_PUBLIC_API_URL is not set")
+// works in both server and client contexts
+export function getApiBaseUrl() {
+  // server context
+  if (typeof window === "undefined") {
+    return process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? ""
+  }
+  // client context
+  return process.env.NEXT_PUBLIC_API_URL ?? ""
 }
 
 export async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...options?.headers
+      ...options?.headers,
     },
-    ...options
+    ...options,
   })
 
   if (!res.ok) {
@@ -21,4 +26,11 @@ export async function apiFetch<T>(
   }
 
   return res.json()
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined"
+    ? localStorage.getItem("access_token")
+    : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
