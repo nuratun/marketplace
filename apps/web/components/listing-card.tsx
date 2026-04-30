@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { type Listing } from "@/types/listing"
+import { Listing } from "@/types/listing"
 
 const categoryIcons: Record<string, { icon: string; color: string }> = {
   "real-estate": { icon: "🏠", color: "#FFF0E6" },
