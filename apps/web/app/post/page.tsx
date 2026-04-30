@@ -103,7 +103,10 @@ export default function PostPage() {
         <StepPhotos
           images={photos}
           onChange={setPhotos}
-          onNext={nextStep}
+          onNext={(uploadedUrls) => {
+            updateForm({ image_urls: uploadedUrls })
+            nextStep()
+          }}          
           onBack={prevStep}
         />
       )}

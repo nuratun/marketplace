@@ -1,10 +1,10 @@
 "use client"
 
-import { useRef } from "react"
-import { X, Plus } from "lucide-react"
-import { PostFormData } from "@/types/post"
+import { useState, useRef } from "react"
+import { X, Loader2, Plus } from "lucide-react"
 
 const MAX_PHOTOS = 5
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function StepPhotos({
   images,
@@ -14,10 +14,12 @@ export default function StepPhotos({
 }: {
   images: File[]
   onChange: (files: File[]) => void
-  onNext: () => void
+  onNext: (uploadedUrls: string[]) => void
   onBack: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -28,6 +30,58 @@ export default function StepPhotos({
 
   function remove(index: number) {
     onChange(images.filter((_, i) => i !== index))
+  }
+
+  async function handleNext() {
+    // No photos is fine — skip upload entirely
+    if (images.length === 0) {
+      onNext([])
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const token = localStorage.getItem("access_token")
+
+      // 1. Get presigned URLs from our API
+      const presignRes = await fetch(`${API_URL}/uploads/presign`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(
+          images.map((f) => ({
+            filename: f.name,
+            content_type: f.type
+          }))
+        )
+      })
+
+      if (!presignRes.ok) throw new Error("فشل في تحضير رفع الصور")
+
+      const presigned: { upload_url: string; public_url: string }[] = await presignRes.json()
+
+      // 2. PUT each file directly to R2
+      await Promise.all(
+        presigned.map(({ upload_url }, i) =>
+          fetch(upload_url, {
+            method: "PUT",
+            headers: { "Content-Type": images[i].type },
+            body: images[i]
+          })
+        )
+      )
+
+      // 3. Pass the public URLs up to the page
+      onNext(presigned.map((p) => p.public_url))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "حدث خطأ أثناء رفع الصور")
+    } finally {
+      setUploading(false)
+    }
   }
 
   const previews = images.map((f) => URL.createObjectURL(f))
@@ -46,7 +100,9 @@ export default function StepPhotos({
 
       <div className="grid grid-cols-5 gap-2 mb-6">
         {previews.map((src, i) => (
-          <div key={i} className="relative aspect-square rounded-lg overflow-hidden"
+          <div
+            key={i}
+            className="relative aspect-square rounded-lg overflow-hidden"
             style={{ border: "1.5px solid #C2622A" }}
           >
             <img src={src} alt="" className="w-full h-full object-cover" />
@@ -71,11 +127,11 @@ export default function StepPhotos({
         {images.length < MAX_PHOTOS && (
           <button
             onClick={() => inputRef.current?.click()}
-            className="aspect-square rounded-lg flex flex-col items-center justify-center gap-1 transition-colors"
+            className="aspect-square rounded-lg flex flex-col items-center justify-center gap-1"
             style={{
               border: "1.5px dashed var(--color-border)",
               background: "var(--color-surface)",
-              color: "var(--color-text-muted)",
+              color: "var(--color-text-muted)"
             }}
           >
             <Plus size={18} />
@@ -83,7 +139,6 @@ export default function StepPhotos({
           </button>
         )}
 
-        {/* Empty slots */}
         {Array.from({
           length: Math.max(0, MAX_PHOTOS - images.length - 1),
         }).map((_, i) => (
@@ -108,30 +163,45 @@ export default function StepPhotos({
         onChange={handleFiles}
       />
 
-      <p className="text-xs mb-5 text-center" style={{ color: "var(--color-text-muted)" }}>
+      <p className="text-xs mb-4 text-center" style={{ color: "var(--color-text-muted)" }}>
         {images.length}/{MAX_PHOTOS} صور مضافة
         {images.length === 0 && " · يمكنك المتابعة بدون صور"}
       </p>
 
+      {error && (
+        <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+          {error}
+        </p>
+      )}
+
       <div className="flex gap-2">
         <button
           onClick={onBack}
-          className="flex-1 py-3 rounded-xl text-sm transition-colors"
+          disabled={uploading}
+          className="flex-1 py-3 rounded-xl text-sm transition-colors disabled:opacity-50"
           style={{
             border: "1px solid var(--color-border)",
             background: "#fff",
             color: "var(--color-text-primary)",
-            fontFamily: "var(--font-arabic)",
+            fontFamily: "var(--font-arabic)"
           }}
         >
           → السابق
         </button>
         <button
-          onClick={onNext}
-          className="flex-[2] py-3 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90"
+          onClick={handleNext}
+          disabled={uploading}
+          className="flex-[2] py-3 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
           style={{ background: "var(--color-brand)" }}
         >
-          التالي: المراجعة ←
+          {uploading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              جاري الرفع...
+            </>
+          ) : (
+            "التالي: المراجعة ←"
+          )}
         </button>
       </div>
     </div>
