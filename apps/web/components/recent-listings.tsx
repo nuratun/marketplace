@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api"
-import { type ListingsResponse } from "@/types/listing"
-import ListingCard, { type Listing } from "@/components/listing-card"
+import { type ListingsResponse, Listing } from "@/types/listing"
+import ListingCard from "@/components/listing-card"
 
 export default async function RecentListings() {
   let data: ListingsResponse
