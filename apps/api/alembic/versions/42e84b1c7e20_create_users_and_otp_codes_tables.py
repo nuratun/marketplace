@@ -3,8 +3,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
-revision = 'your_revision_id'  # leave whatever was generated
-down_revision = None
+revision = '1.1' 
+down_revision = 'your_revision_id'
 branch_labels = None
 depends_on = None
 
