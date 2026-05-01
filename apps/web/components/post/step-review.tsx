@@ -20,7 +20,7 @@ export default function StepReview({
       <h2 className="text-xl font-bold">مراجعة الإعلان</h2>
 
       {/* Summary of what they entered */}
-      <div className="rounded-xl border border-border p-4 space-y-3 text-sm">
+      <div className="rounded-xl p-4 space-y-3 text-sm" style={{ border: "1px solid var(--color-border)" }}>
         <Row label="الفئة" value={form.category} />
         <Row label="العنوان" value={form.title} />
         <Row label="الوصف" value={form.description} />
@@ -61,8 +61,8 @@ export default function StepReview({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-end">{value}</span>
+      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+      <span className="font-medium text-end" style={{ color: "var(--color-text-primary)" }}>{value}</span>
     </div>
   )
 }
