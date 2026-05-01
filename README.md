@@ -28,7 +28,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 - Post, browse, and search listings across categories
 - Category-specific listing attributes via JSONB
 - Arabic-first design with full RTL layout
-- Image uploads per listing (Cloudflare R2 — planned)
+- Image uploads per listing (Cloudflare R2 — live)
 - Mobile app (React Native) planned for phase 2
 - Business/advertiser login planned for a later phase
 
@@ -47,7 +47,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 | **Primary Database** | PostgreSQL (Supabase) | Free tier during dev, session pooler for IPv4 compatibility |
 | **Search** | Meilisearch | Arabic full-text search — planned |
 | **Cache / Queue** | Redis + BullMQ | Planned |
-| **Object Storage** | Cloudflare R2 | Listing photo storage — planned |
+| **Object Storage** | Cloudflare R2 | Live — presigned URL upload, direct browser → R2 |
 | **Auth** | Custom JWT + OTP (phone-based) | Access tokens (15 min, localStorage) + refresh tokens in httpOnly cookies (30 days) |
 | **Package Manager (API)** | uv | Fast Python package manager — always use `uv add` never `pip install` |
 | **Font** | IBM Plex Sans Arabic | Arabic-first, clean for marketplace UI |
@@ -62,7 +62,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 | **Backend API** | Railway | FastAPI server | Migrate to Hetzner + Coolify pre-launch |
 | **Database** | Supabase | PostgreSQL | Use Session Pooler URL (IPv4 compatible). Free tier pauses after 1 week inactivity |
 | **DNS / CDN** | Cloudflare | CDN + DNS | Planned |
-| **Image Storage** | Cloudflare R2 | Listing photos | Planned |
+| **Image Storage** | Cloudflare R2 | Listing photos | Live — bucket: `shamna-listings` |
 | **Search** | Meilisearch | Self-hosted on Hetzner | Planned |
 
 ### Pre-launch migration plan
@@ -82,7 +82,8 @@ shamna/
 │   │   │   ├── core/
 │   │   │   │   ├── config.py       ← pydantic-settings (reads .env)
 │   │   │   │   ├── security.py     ← JWT create/decode helpers
-│   │   │   │   └── dependencies.py ← get_current_user / get_optional_user
+│   │   │   │   ├── dependencies.py ← get_current_user / get_optional_user
+│   │   │   │   └── r2.py           ← R2 client, generate_presigned_upload, public_url
 │   │   │   ├── db/
 │   │   │   │   ├── base.py         ← SQLAlchemy DeclarativeBase
 │   │   │   │   └── session.py      ← engine, SessionLocal, get_db
@@ -92,7 +93,8 @@ shamna/
 │   │   │   │   └── listing.py      ← Listing model
 │   │   │   ├── routers/
 │   │   │   │   ├── auth.py         ← /auth/request-otp, /auth/verify-otp, /auth/refresh
-│   │   │   │   └── listings.py     ← /listings CRUD + phone reveal
+│   │   │   │   ├── listings.py     ← /listings CRUD + phone reveal
+│   │   │   │   └── uploads.py      ← /uploads/presign — generates R2 presigned PUT URLs
 │   │   │   └── main.py             ← FastAPI app, CORS, router registration
 │   │   ├── alembic.ini
 │   │   ├── Procfile                ← Railway: uvicorn app.main:app
@@ -103,6 +105,7 @@ shamna/
 │   │   │   ├── category/[slug]/    ← Category listing page + filters
 │   │   │   ├── listing/[id]/       ← Listing detail page (server component)
 │   │   │   ├── post/               ← Multi-step post an ad wizard
+│   │   │   │   └── page.tsx        ← Owns all form state, handles submit to /listings
 │   │   │   ├── layout.tsx          ← Root layout: IBM Plex Sans Arabic, RTL, Navbar + Footer
 │   │   │   ├── page.tsx            ← Homepage: Hero + CategoryGrid + RecentListings
 │   │   │   └── globals.css         ← CSS vars: brand, surface, border, text colors
@@ -124,7 +127,8 @@ shamna/
 │   │   ├── lib/
 │   │   │   └── api.ts              ← apiFetch, getAuthHeaders, getApiBaseUrl
 │   │   ├── types/
-│   │   │   └── listing.ts          ← Listing, Seller, ListingsResponse types
+│   │   │   ├── listing.ts          ← Listing, Seller, ListingsResponse types
+│   │   │   └── post.ts             ← PostFormData, EMPTY_POST_FORM
 │   │   └── middleware.ts           ← Protects /post, /profile, /my-listings routes
 │   └── mobile/                     ← React Native stub (phase 2)
 ├── .github/
@@ -175,6 +179,13 @@ uv run uvicorn app.main:app --reload
 DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-1-eu-west-3.pooler.supabase.com:5432/postgres?sslmode=require
 JWT_SECRET=your-generated-secret      # generate with: openssl rand -hex 32
 OTP_DEV_BYPASS=1234                   # dev only — remove before launch
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your_account_id
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_BUCKET_NAME=shamna-listings
+R2_PUBLIC_URL=https://media.shamna.com   # or your r2.dev subdomain URL
 ```
 
 ### `apps/web/.env.local`
@@ -182,6 +193,7 @@ OTP_DEV_BYPASS=1234                   # dev only — remove before launch
 ```env
 NEXT_PUBLIC_API_URL=https://shamna-production.up.railway.app
 API_URL=https://shamna-production.up.railway.app
+R2_PUBLIC_URL=https://media.shamna.com
 ```
 
 > `NEXT_PUBLIC_API_URL` is used by client components. `API_URL` is used by server components and is not exposed to the browser.
@@ -189,9 +201,14 @@ API_URL=https://shamna-production.up.railway.app
 ### Railway environment variables (FastAPI service)
 
 ```
-DATABASE_URL    → Supabase session pooler URL
-JWT_SECRET      → same as .env above
-OTP_DEV_BYPASS  → 1234 (remove before launch)
+DATABASE_URL         → Supabase session pooler URL
+JWT_SECRET           → same as .env above
+OTP_DEV_BYPASS       → 1234 (remove before launch)
+R2_ACCOUNT_ID        → Cloudflare account ID
+R2_ACCESS_KEY_ID     → R2 API token access key
+R2_SECRET_ACCESS_KEY → R2 API token secret
+R2_BUCKET_NAME       → shamna-listings
+R2_PUBLIC_URL        → https://media.shamna.com
 ```
 
 ### Vercel environment variables
@@ -199,6 +216,7 @@ OTP_DEV_BYPASS  → 1234 (remove before launch)
 ```
 NEXT_PUBLIC_API_URL  → https://shamna-production.up.railway.app
 API_URL              → https://shamna-production.up.railway.app
+R2_PUBLIC_URL        → https://media.shamna.com
 ```
 
 ### GitHub Secrets (for migration CI)
@@ -258,7 +276,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `city` | String(50) | Arabic city name |
 | `status` | String(10) | "active", "sold", "expired" |
 | `attrs` | JSONB | Category-specific attributes (flexible) |
-| `image_urls` | JSONB | Array of image URL strings |
+| `image_urls` | JSONB | Array of R2 public URL strings |
 | `views` | Integer | Incremented on each detail page visit (skipped for owner) |
 | `expires_at` | DateTime | 30 days from creation |
 | `created_at` | DateTime | |
@@ -338,7 +356,7 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
   "city": "دمشق",
   "status": "active",
   "attrs": {},
-  "image_urls": [],
+  "image_urls": ["https://media.shamna.com/listings/user-id/uuid.jpg"],
   "views": 12,
   "created_at": "2026-04-30T07:58:32Z",
   "expires_at": "2026-05-30T07:58:32Z",
@@ -349,6 +367,32 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
   }
 }
 ```
+
+### Upload endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/uploads/presign` | Required | Get presigned R2 PUT URLs for direct browser upload |
+
+**POST /uploads/presign request:**
+```json
+[
+  { "filename": "photo.jpg", "content_type": "image/jpeg" },
+  { "filename": "photo2.png", "content_type": "image/png" }
+]
+```
+
+**POST /uploads/presign response:**
+```json
+[
+  {
+    "upload_url": "https://...r2.cloudflarestorage.com/...?X-Amz-Signature=...",
+    "public_url": "https://media.shamna.com/listings/user-id/uuid.jpg"
+  }
+]
+```
+
+> Upload flow: frontend calls `/uploads/presign` → PUTs each file directly to R2 using `upload_url` → stores `public_url` strings in `image_urls` on listing create. Max 5 images. Allowed types: jpeg, png, webp.
 
 **Authorization for protected endpoints:**
 ```
@@ -368,11 +412,17 @@ Authorization: Bearer <access_token>
 
 **URL-based filters:** Category page filters stored in URL query params — shareable and bookmarkable. `CategoryFilters` component reads/writes via `useSearchParams` + `router.push`.
 
+**R2 image upload — presigned URL pattern:** Frontend requests presigned PUT URLs from our API (`/uploads/presign`). The API generates them using `boto3` (S3-compatible) and returns them alongside the final public URLs. The browser PUTs files directly to R2 — the API server never buffers image bytes. Files are keyed as `listings/{user_id}/{uuid}.ext`. R2 bucket CORS policy allows PUT/GET from `localhost:3000` and the production domain, with `content-type` in allowed headers (required because presigned URLs are signed with content-type).
+
 **Server vs client API calls:** Server components use `API_URL` env var (not exposed to browser). Client components use `NEXT_PUBLIC_API_URL`. Both point to same Railway URL — distinction matters for Next.js build process.
 
 **Next.js 15 async params:** `params` in server components is a Promise. Always `const { id } = await params` before use — never access `params.id` directly.
 
+**CSS variables for design tokens:** Custom colors (`--color-brand`, `--color-border`, `--color-surface`, `--color-text-primary`, `--color-text-muted`) are CSS variables defined in `globals.css`. Always use inline `style={{ ... }}` with these variables in components — never Tailwind utility classes like `bg-brand` or `border-border` which Tailwind won't generate for custom vars.
+
 **`uv` for Python deps:** All packages managed through `uv`. Never `pip install` — always `uv add`.
+
+**Pydantic v2 settings:** Use `model_config = SettingsConfigDict(env_file=".env")` in `Settings` class. Do NOT use the old inner `class Config:` pattern — Pydantic v2 will throw `config-both` error if both are present.
 
 ---
 
@@ -396,8 +446,9 @@ Authorization: Bearer <access_token>
 | Auth middleware (protected routes) | ✅ Done |
 | Frontend auth flow (OTP UI) — tested end to end | ✅ Done |
 | Listings API (create, list, get, status, phone reveal) | ✅ Done |
-| Post form wired to API (submit) | 🔄 Next |
-| Image upload (Cloudflare R2) | ⏳ Planned |
+| Post form wired to API (submit) | ✅ Done |
+| Image upload (Cloudflare R2) | ✅ Done |
+| Auth persistence (token survives refresh, AuthContext) | 🔄 Next |
 | User profile page | ⏳ Planned |
 | My listings page (owner view, mark as sold) | ⏳ Planned |
 | Meilisearch integration | ⏳ Planned |
@@ -416,7 +467,8 @@ Authorization: Bearer <access_token>
 - [x] Auth flow (OTP + JWT)
 - [x] Listings CRUD API
 - [x] Full frontend shell (homepage, category, detail, post form)
-- [ ] Post form submission + image upload
+- [x] Post form submission + image upload (R2)
+- [ ] Auth persistence (AuthContext + token refresh)
 - [ ] User profile + my listings
 - [ ] Search (Meilisearch)
 
@@ -431,3 +483,28 @@ Authorization: Bearer <access_token>
 - [ ] Business/advertiser accounts
 - [ ] ML features: recommendations, price suggestions, fraud detection
 - [ ] Analytics dashboard
+
+---
+
+## Next Session: Auth Persistence
+
+The immediate next task is building proper auth persistence. Currently the session is lost on every page refresh.
+
+**What needs to be built:**
+
+1. **`AuthContext`** (`apps/web/contexts/auth-context.tsx`) — React context that wraps the app, holds `user` and `accessToken` state, reads from `localStorage` on mount, exposes `login()`, `logout()`, and `refreshToken()` methods.
+
+2. **Silent token refresh** — When the 15-min access token expires, automatically call `POST /auth/refresh` using the httpOnly refresh token cookie to get a new access token, without logging the user out.
+
+3. **`useAuth()` hook** — Simple hook that consumes `AuthContext`. Used by navbar (show login vs profile), post form (get token for API calls), and any protected component.
+
+4. **Navbar update** — Currently always shows the login button. Should show the user's name/avatar and a dropdown (profile, my listings, logout) when authenticated.
+
+5. **Post form update** — Currently reads token directly from `localStorage`. Should use `useAuth()` instead.
+
+**Key files to create/modify:**
+- Create: `apps/web/contexts/auth-context.tsx`
+- Modify: `apps/web/app/layout.tsx` — wrap with `AuthProvider`
+- Modify: `apps/web/components/navbar.tsx` — consume `useAuth()`
+- Modify: `apps/web/app/post/page.tsx` — use `useAuth()` instead of direct localStorage
+- Modify: `apps/web/app/auth/` — call `login()` from context on OTP success
