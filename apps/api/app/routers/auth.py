@@ -81,7 +81,7 @@ def verify_otp(body: OTPVerifyRequest, response: Response, db: Session = Depends
         value=refresh_token,
         httponly=True,
         secure=settings.ENVIRONMENT == "production",
-        samesite="lax",
+        samesite="none" if settings.ENVIRONMENT == "production" else "lax",
         max_age=60 * 60 * 24 * 30
     )
 
