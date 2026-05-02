@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { apiFetch } from "@/lib/api"
+import type { AuthUser } from "@/contexts/auth-context"
+import { useAuth } from "@/contexts/auth-context"
 
 type Step = "phone" | "otp"
 
@@ -17,6 +19,7 @@ export default function AuthPageWrapper() {
 function AuthPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { login } = useAuth()
   const [step, setStep] = useState<Step>("phone")
   const [phone, setPhone] = useState("")
   const [otp, setOtp] = useState(["", "", "", ""])
@@ -55,12 +58,11 @@ function AuthPage() {
     }
     setLoading(true)
     try {
-      const data = await apiFetch<{ access_token: string }>("/auth/verify-otp", {
+      const data = await apiFetch<{ access_token: string; user: AuthUser }>("/auth/verify-otp", {
         method: "POST",
         body: JSON.stringify({ phone: `+963${phone}`, code }),
       })
-      document.cookie = `access_token=${data.access_token}; path=/; max-age=900; SameSite=Lax`
-      localStorage.setItem("access_token", data.access_token) // keep for API calls
+      login(data.access_token, data.user) // keep for API calls
       router.push(redirectTo)
     } catch {
       setError("الرمز غير صحيح أو منتهي الصلاحية")

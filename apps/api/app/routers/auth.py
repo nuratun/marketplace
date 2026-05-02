@@ -7,6 +7,7 @@ import random
 from app.db.session import get_db
 from app.models.user import User
 from app.models.otp import OTPCode
+from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
 
@@ -18,6 +19,18 @@ class PhoneRequest(BaseModel):
 class OTPVerifyRequest(BaseModel):
     phone: str
     code: str
+
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": str(current_user.id),
+        "phone": current_user.phone,
+        "name": current_user.name,
+        "email": current_user.email,
+        "profile_pic": current_user.profile_pic,
+        "user_type": current_user.user_type,
+        "created_at": current_user.created_at.isoformat()
+    }
 
 @router.post("/request-otp")
 def request_otp(body: PhoneRequest, db: Session = Depends(get_db)):
@@ -67,15 +80,23 @@ def verify_otp(body: OTPVerifyRequest, response: Response, db: Session = Depends
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.ENVIRONMENT == "production",
         samesite="lax",
         max_age=60 * 60 * 24 * 30
     )
 
     return {
         "access_token": access_token,
-        "is_new_user": user.name is None,
-        "user": { "id": str(user.id), "phone": user.phone, "name": user.name }
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "phone": user.phone,
+            "name": user.name,
+            "email": user.email,
+            "profile_pic": user.profile_pic,
+            "user_type": user.user_type,
+            "created_at": user.created_at.isoformat()
+        }
     }
 
 @router.post("/refresh")

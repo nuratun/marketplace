@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str
     R2_BUCKET_NAME: str
     R2_PUBLIC_URL: str  # e.g. https://media.shamna.com
-
+    ENVIRONMENT: str = "development" 
+    
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

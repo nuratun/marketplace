@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
 import { PostFormData, EMPTY_POST_FORM } from "@/types/post"
 import StepIndicator from "@/components/post/step-indicator"
 import StepCategory from "@/components/post/step-category"
@@ -18,6 +19,7 @@ const STEPS = [
 
 export default function PostPage() {
   const router = useRouter()
+  const { accessToken, refreshToken } = useAuth()
   const [step, setStep] = useState(0)
   const [photos, setPhotos] = useState<File[]>([])
   const [form, setForm] = useState<PostFormData>(EMPTY_POST_FORM)
@@ -40,7 +42,9 @@ export default function PostPage() {
     setIsSubmitting(true)
     setSubmitError(null)
 
-    const token = localStorage.getItem("access_token")
+    // When making the API call, use accessToken directly.
+    // If you want to be safe against expiry mid-form, call refreshToken() first:
+    const token = accessToken ?? await refreshToken()
 
     try {
       const res = await fetch(

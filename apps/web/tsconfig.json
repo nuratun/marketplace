@@ -22,6 +22,7 @@
       "@/*": ["./*"],
       "@/app": ["./app"],
       "@/components": ["./components"],
+      "@/context": ["./context"],
       "@/hooks": ["./hooks"],
       "@/lib": ["./lib"],
       "@/public": ["./public"],

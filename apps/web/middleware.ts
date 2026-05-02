@@ -11,9 +11,11 @@ export function middleware(request: NextRequest) {
 
   if (!isProtected) return NextResponse.next()
 
-  const token = request.cookies.get("access_token")?.value
+  // Access token is in localStorage (unreadable by middleware).
+  // Refresh token is in the httpOnly cookie — use that as the session signal.
+  const hasSession = request.cookies.get("refresh_token")?.value
 
-  if (!token) {
+  if (!hasSession) {
     const loginUrl = new URL("/auth", request.url)
     loginUrl.searchParams.set("from", pathname)
     return NextResponse.redirect(loginUrl)
