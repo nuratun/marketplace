@@ -25,12 +25,19 @@ function EditableField({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? "")
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSave() {
     setSaving(true)
-    await onSave(draft)
-    setSaving(false)
-    setEditing(false)
+    setError(null)
+    try {
+      await onSave(draft)
+      setEditing(false)
+    } catch {
+      setError("Save failed, please try again")
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleCancel() {
@@ -44,42 +51,47 @@ function EditableField({
         {label}
       </label>
       {editing ? (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          {multiline ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={3}
-              style={{
-                flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
-                border: "1px solid var(--color-brand)",
-                fontFamily: "var(--font-arabic)", resize: "vertical",
-                color: "var(--color-text-primary)", outline: "none",
-              }}
-            />
-          ) : (
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") handleCancel() }}
-              autoFocus
-              style={{
-                flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
-                border: "1px solid var(--color-brand)",
-                fontFamily: "var(--font-arabic)",
-                color: "var(--color-text-primary)", outline: "none",
-              }}
-            />
+        <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            {multiline ? (
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={3}
+                style={{
+                  flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
+                  border: "1px solid var(--color-brand)",
+                  fontFamily: "var(--font-arabic)", resize: "vertical",
+                  color: "var(--color-text-primary)", outline: "none",
+                }}
+              />
+            ) : (
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") handleCancel() }}
+                autoFocus
+                style={{
+                  flex: 1, padding: "8px 12px", borderRadius: 8, fontSize: 14,
+                  border: "1px solid var(--color-brand)",
+                  fontFamily: "var(--font-arabic)",
+                  color: "var(--color-text-primary)", outline: "none",
+                }}
+              />
+            )}
+            <button onClick={handleSave} disabled={saving}
+              style={{ padding: 8, borderRadius: 8, background: "var(--color-brand)", border: "none", cursor: "pointer", color: "#fff", display: "flex" }}>
+              <Check size={16} />
+            </button>
+            <button onClick={handleCancel}
+              style={{ padding: 8, borderRadius: 8, background: "var(--color-surface)", border: "1px solid var(--color-border)", cursor: "pointer", display: "flex" }}>
+              <X size={16} />
+            </button>
+          </div>
+          {error && (
+            <p style={{ fontSize: 12, color: "#dc2626", marginTop: 4 }}>{error}</p>
           )}
-          <button onClick={handleSave} disabled={saving}
-            style={{ padding: 8, borderRadius: 8, background: "var(--color-brand)", border: "none", cursor: "pointer", color: "#fff", display: "flex" }}>
-            <Check size={16} />
-          </button>
-          <button onClick={handleCancel}
-            style={{ padding: 8, borderRadius: 8, background: "var(--color-surface)", border: "1px solid var(--color-border)", cursor: "pointer", display: "flex" }}>
-            <X size={16} />
-          </button>
         </div>
       ) : (
         <div
