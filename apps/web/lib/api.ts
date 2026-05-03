@@ -1,4 +1,3 @@
-// works in both server and client contexts
 export function getApiBaseUrl() {
   // server context
   if (typeof window === "undefined") {

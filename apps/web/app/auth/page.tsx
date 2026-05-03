@@ -53,7 +53,7 @@ function AuthPage() {
     setError("")
     const code = otp.join("")
     if (code.length !== 4) {
-      setError("يرجى إدخال الرمز كاملاً")
+      setError("Please enter the full code")
       return
     }
     setLoading(true)
@@ -63,9 +63,11 @@ function AuthPage() {
         body: JSON.stringify({ phone: `+963${phone}`, code }),
       })
       login(data.access_token, data.user) // keep for API calls
-      router.push(redirectTo)
+      // Use full navigation instead of router.push so middleware
+      // re-evaluates with the fresh refresh_token cookie
+      window.location.href = redirectTo
     } catch {
-      setError("الرمز غير صحيح أو منتهي الصلاحية")
+      setError("The code is invalid or expired")
     } finally {
       setLoading(false)
     }

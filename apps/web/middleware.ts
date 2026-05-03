@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
 
   // Access token is in localStorage (unreadable by middleware).
   // Refresh token is in the httpOnly cookie — use that as the session signal.
-  const hasSession = request.cookies.get("refresh_token")?.value
+  const hasSession = request.cookies.get("session")?.value
 
   if (!hasSession) {
     const loginUrl = new URL("/auth", request.url)

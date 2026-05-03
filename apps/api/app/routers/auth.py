@@ -133,6 +133,15 @@ def verify_otp(body: OTPVerifyRequest, response: Response, db: Session = Depends
         max_age=60 * 60 * 24 * 30
     )
 
+    response.set_cookie(
+        key="session",
+        value="1",  # just a presence signal, no sensitive data
+        httponly=False,  # readable by middleware
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",  # works cross-site for navigation requests
+        max_age=60 * 60 * 24 * 30,
+    )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -161,6 +170,15 @@ def refresh(response: Response, refresh_token: str = Cookie(None), db: Session =
         user = db.query(User).filter(User.id == payload["sub"]).first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        # Only set the cookie after we've confirmed the token is valid
+        response.set_cookie(
+            key="session",
+            value="1",
+            httponly=False,
+            secure=settings.ENVIRONMENT == "production",
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+        )
         return { "access_token": create_access_token(str(user.id)) }
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
