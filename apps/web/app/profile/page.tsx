@@ -204,7 +204,7 @@ export default function ProfilePage() {
         body: JSON.stringify({ profile_pic: public_url }),
       })
 
-      login(token, { ...user, profile_pic: public_url })
+      login(token, { ...(user as AuthUser), profile_pic: public_url })
     } catch {
       setPhotoError("An error occurred while uploading the image")
     } finally {
@@ -229,7 +229,7 @@ export default function ProfilePage() {
       }}>
         {/* Avatar + upload */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24 }}>
-          <div style={{ position: "relative", shrink: 0 }}>
+          <div style={{ position: "relative" }}>
             <div style={{
               width: 80, height: 80, borderRadius: "50%",
               background: "var(--color-brand)", color: "#fff",
