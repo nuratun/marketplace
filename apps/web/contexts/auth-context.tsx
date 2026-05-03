@@ -16,8 +16,11 @@ export interface AuthUser {
   phone: string
   name: string | null
   email: string | null
+  bio: string | null
   profile_pic: string | null
   user_type: string
+  standing: string // "good" | "warned" | "suspended"
+  warning_reason: string | null
   created_at: string
 }
 

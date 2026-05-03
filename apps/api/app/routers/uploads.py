@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from app.core.r2 import generate_presigned_upload, public_url
 from app.core.dependencies import get_current_user
@@ -17,6 +17,9 @@ class PresignRequest(BaseModel):
 class PresignResponse(BaseModel):
     upload_url: str   # PUT to this
     public_url: str   # store this in image_urls after upload
+
+class PresignProfileRequest(BaseModel):
+    content_type: str = "image/jpeg"
 
 @router.post("/presign", response_model=list[PresignResponse])
 def presign_uploads(
@@ -46,15 +49,15 @@ def presign_uploads(
 
 @router.post("/presign-profile")
 def presign_profile(
-    content_type: str = "image/jpeg",
+    body: PresignProfileRequest,
     current_user: User = Depends(get_current_user),
 ):
     allowed = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
-    if content_type not in allowed:
+    if body.content_type not in allowed:
         raise HTTPException(status_code=400, detail="Unsupported image type")
     
-    ext = allowed[content_type]
+    ext = allowed[body.content_type]
     key = f"profiles/{current_user.id}.{ext}"
     
-    upload_url = generate_presigned_upload(key, content_type)
+    upload_url = generate_presigned_upload(key, body.content_type)
     return {"upload_url": upload_url, "public_url": public_url(key)}
