@@ -3,14 +3,13 @@ import Image from "next/image"
 import { ChevronLeft } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { type ListingsResponse } from "@/types/listing"
-import ListingCard from "@/components/listing-card"
 
 export type SectionCategory = {
   slug: string
   name: string
   icon: string
   description: string
-  accentColor: string // CSS gradient for the feature card
+  accentColor: string 
 }
 
 type Props = {
@@ -142,7 +141,7 @@ export default async function CategorySection({ category }: Props) {
             <Link
               key={listing.id}
               href={`/listing/${listing.id}`}
-              style={{ background: "#fff", textDecoration: "none", display: "block" }}
+              style={{ background: "#fff", textDecoration: "none", display: "block", minWidth: 0, overflow: "hidden" }}
               className="mini-card"
             >
               {/* Thumbnail */}
@@ -154,9 +153,9 @@ export default async function CategorySection({ category }: Props) {
                   position: "relative",
                 }}
               >
-                {listing.images?.[0] ? (
+                {listing.image_urls?.[0] ? (
                   <Image
-                    src={listing.images[0]}
+                    src={listing.image_urls[0]}
                     alt={listing.title}
                     fill
                     sizes="160px"

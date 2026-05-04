@@ -11,7 +11,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-car.jpg",
     bannerHeading: "سيارات بأفضل الأسعار",
     bannerSubtext: "آلاف الإعلانات من أصحابها مباشرة",
-    accentColor: "linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%)",
+    accentColor: "linear-gradient(135deg, #1a1a2e 0%, #0f4a30 100%)",
     description: "تصفح آلاف السيارات المعروضة من أصحابها مباشرة",
   },
   {
@@ -31,7 +31,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-electronics.jpg",
     bannerHeading: "اعثر على هاتفك أو جهاز الكمبيوتر المثالي لك",
     bannerSubtext: "",
-    accentColor: "linear-gradient(135deg, #1a3a2e 0%, #E6FAF0 100%)",
+    accentColor: "linear-gradient(135deg, #1a3a2e 0%, #0f4a30 100%)",
     description: "هواتف، لابتوبات، وإلكترونيات بأسعار مناسبة",
   },
   {
@@ -41,7 +41,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-furniture.jpg",
     bannerHeading: "اعثر على تصميم منزلك المثالي",
     bannerSubtext: "",
-    accentColor: "linear-gradient(135deg, #1a3a2e 0%, #FFF8E6 100%)",
+    accentColor: "linear-gradient(135deg, #1a3a2e 0%, #0f4a30 100%)",
     description: "أثاث وديكورات ومستلزمات المنزل بأسعار رائعة",
   },
   {
@@ -51,7 +51,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-clothing.jpg",
     bannerHeading: "اعثري على إطلالتكِ المثالية",
     bannerSubtext: "",
-    accentColor: "linear - gradient(135deg, #1a3a2e 0%, #F9E6FF 100%)",
+    accentColor: "linear-gradient(135deg, #1a3a2e 0%, #0f4a30 100%)",
     description: "ملابس وإكسسوارات وأحذية لكل الأذواق",
   },
   {
@@ -61,7 +61,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-jobs.jpg",
     bannerHeading: "ابحث عن وظيفتك التالية",
     bannerSubtext: "",
-    accentColor: "linear - gradient(135deg, #1a3a2e 0%, #E6FFF6 100%)",
+    accentColor: "linear - gradient(135deg, #1a3a2e 0%, #0f4a30 100%)",
     description: "أعلن عن خدمتك أو ابحث عن فرصة عمل",
   }
 ]
