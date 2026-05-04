@@ -96,38 +96,20 @@ export default function Hero({ categories }: Props) {
             padding: "32px 40px",
           }}
         >
-          {/* Faint large icon watermark */}
-          <span
-            style={{
-              position: "absolute",
-              left: 24,
-              top: "50%",
-              transform: "translateY(-50%)",
-              fontSize: 140,
-              opacity: 0.08,
-              lineHeight: 1,
-              pointerEvents: "none",
-              userSelect: "none",
-            }}
-          >
-            {active.icon}
-          </span>
-
+          {/* Full-panel background image */}
+          {active.bannerImage && (
+            <Image
+              key={active.slug}
+              src={active.bannerImage}
+              alt={active.name}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 900px) calc(100vw - 180px), calc(100vw - 440px)"
+              style={{ objectFit: "cover", objectPosition: "center", opacity:1 }}
+              priority={activeIndex === 0}
+            />
+          )}
           {/* Text content — keyed so it re-mounts on category change */}
           <div key={active.slug} style={{ position: "relative", zIndex: 1 }} className="banner-text">
-            {/* <div style={{ fontSize: 52, marginBottom: 12, lineHeight: 1 }}>{active.icon}</div> */}
-            {active.bannerImage ? (
-              <Image
-                src={active.bannerImage}
-                alt={active.name}
-                width={120}
-                height={120}
-                style={{ objectFit: "contain", marginBottom: 12 }}
-                priority={activeIndex === 0}
-              />
-            ) : (
-              <div style={{ fontSize: 52, marginBottom: 12, lineHeight: 1 }}>{active.icon}</div>
-            )}
             <h2
               style={{
                 fontSize: 26,
