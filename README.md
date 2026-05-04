@@ -30,6 +30,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 - Category-specific listing attributes via JSONB
 - Arabic-first design with full RTL layout
 - Image uploads per listing and profile photos (Cloudflare R2 — live)
+- My Listings page — view, mark as sold, delete your own listings
 - Mobile app (React Native) planned for phase 2
 - Business/advertiser login planned for a later phase
 
@@ -59,21 +60,21 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 
 | Service | Provider | Purpose | Notes |
 |---|---|---|---|
-| **Web Frontend** | Vercel | Next.js hosting | Auto-deploy from GitHub |
-| **Backend API** | Railway | FastAPI server | Migrate to Hetzner + Coolify pre-launch |
+| **Web Frontend** | Vercel | Next.js hosting | Live at `https://www.shamna.shop` — auto-deploy from GitHub |
+| **Backend API** | Railway | FastAPI server | Live at `https://railway.shamna.shop` — migrate to Hetzner + Coolify pre-launch |
 | **Database** | Supabase | PostgreSQL | Use Session Pooler URL (IPv4 compatible). Free tier pauses after 1 week inactivity |
-| **DNS / CDN** | Cloudflare | CDN + DNS | Custom domain setup in progress |
-| **Image Storage** | Cloudflare R2 | Listing photos + profile pics | Live — bucket: `shamna-listings` |
+| **DNS / CDN** | Cloudflare | DNS (proxy disabled for Vercel compatibility) | Both `www.shamna.shop` and `railway.shamna.shop` resolve correctly |
+| **Image Storage** | Cloudflare R2 | Listing photos + profile pics | Live — bucket: `shamna-listings`, public URL: `https://media.shamna.shop` |
 | **Search** | Meilisearch | Self-hosted on Hetzner | Planned |
+
+### Domain setup (completed)
+- Frontend: `https://www.shamna.shop` → Vercel
+- API: `https://railway.shamna.shop` → Railway (port 8080)
+- Both sit under the same root domain (`.shamna.shop`), which means cookies with `domain=".shamna.shop"` are shared across both — this fully resolves the cross-domain cookie issue.
+- Cloudflare proxy is **disabled** on both records (Vercel requires DNS-only mode).
 
 ### Pre-launch migration plan
 Before launch, migrate Railway → **Hetzner Cloud + Coolify** for full control and lower cost. Meilisearch and Redis will also be self-hosted there.
-
-### ⚠️ Known Infrastructure Issue — Cross-Domain Cookies
-The frontend (Vercel) and backend (Railway) are on different domains. This causes `samesite` cookie issues that break middleware-level route protection and silent token refresh in local dev and on preview URLs. **This will be fully resolved once a custom domain is wired up** (e.g. frontend on `shamna.com`, API on `api.shamna.com` — same-site, `samesite="lax"` works perfectly). Until then:
-- Auth context (`AuthContext`) works correctly — user stays logged in across navigation
-- Middleware route protection (`/post`, `/profile`, `/my-listings`) redirects even logged-in users on cross-domain deployments
-- Workaround in place: a non-httpOnly `session=1` cookie set alongside the refresh token, readable by middleware with `samesite="lax"`
 
 ---
 
@@ -100,7 +101,7 @@ shamna/
 │   │   │   │   └── listing.py      ← Listing model
 │   │   │   ├── routers/
 │   │   │   │   ├── auth.py         ← /auth/* endpoints including /auth/me (GET + PUT)
-│   │   │   │   ├── listings.py     ← /listings CRUD + phone reveal
+│   │   │   │   ├── listings.py     ← /listings CRUD + /listings/mine + phone reveal + delete
 │   │   │   │   └── uploads.py      ← /uploads/presign + /uploads/presign-profile
 │   │   │   └── main.py             ← FastAPI app, CORS, router registration
 │   │   ├── alembic.ini
@@ -111,6 +112,8 @@ shamna/
 │   │   │   ├── auth/               ← OTP login flow (2 steps: phone → code)
 │   │   │   ├── category/[slug]/    ← Category listing page + filters
 │   │   │   ├── listing/[id]/       ← Listing detail page (server component)
+│   │   │   ├── my-listings/        ← Owner listing management page
+│   │   │   │   └── page.tsx        ← View all own listings, mark as sold, delete
 │   │   │   ├── post/               ← Multi-step post an ad wizard
 │   │   │   │   └── page.tsx        ← Owns all form state, handles submit to /listings
 │   │   │   ├── profile/            ← User profile page (inline editable fields)
@@ -196,7 +199,7 @@ R2_ACCOUNT_ID=your_account_id
 R2_ACCESS_KEY_ID=your_access_key_id
 R2_SECRET_ACCESS_KEY=your_secret_access_key
 R2_BUCKET_NAME=shamna-listings
-R2_PUBLIC_URL=https://media.shamna.com   # or your r2.dev subdomain URL
+R2_PUBLIC_URL=https://media.shamna.shop
 ```
 
 ### `apps/web/.env.local`
@@ -220,15 +223,15 @@ R2_ACCOUNT_ID        → Cloudflare account ID
 R2_ACCESS_KEY_ID     → R2 API token access key
 R2_SECRET_ACCESS_KEY → R2 API token secret
 R2_BUCKET_NAME       → shamna-listings
-R2_PUBLIC_URL        → https://media.shamna.com
+R2_PUBLIC_URL        → https://media.shamna.shop
 ```
 
 ### Vercel environment variables
 
 ```
-NEXT_PUBLIC_API_URL  → https://shamna-production.up.railway.app
-API_URL              → https://shamna-production.up.railway.app
-R2_PUBLIC_URL        → https://media.shamna.com
+NEXT_PUBLIC_API_URL  → https://railway.shamna.shop
+API_URL              → https://railway.shamna.shop
+R2_PUBLIC_URL        → https://media.shamna.shop
 ```
 
 ### GitHub Secrets (for migration CI)
@@ -321,9 +324,9 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 
 ## API Reference
 
-Base URL: `https://shamna-production.up.railway.app`
+Base URL: `https://railway.shamna.shop`
 
-Interactive docs: `https://shamna-production.up.railway.app/docs`
+Interactive docs: `https://railway.shamna.shop/docs`
 
 ### Auth endpoints
 
@@ -369,9 +372,13 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
 |---|---|---|---|
 | GET | `/listings` | No | List with filters + pagination |
 | POST | `/listings` | Required | Create a listing |
+| GET | `/listings/mine` | Required | Get all listings owned by current user |
 | GET | `/listings/{id}` | Optional | Get listing detail (increments views) |
 | PATCH | `/listings/{id}/status` | Required (owner only) | Mark as sold |
+| DELETE | `/listings/{id}` | Required (owner only) | Hard delete a listing |
 | GET | `/listings/{id}/phone` | Required | Reveal seller phone number |
+
+> ⚠️ Route order matters in FastAPI: `/listings/mine` must be registered **before** `/listings/{id}` in `listings.py`, otherwise the string `"mine"` is matched as a listing ID.
 
 **GET /listings query params:**
 
@@ -383,6 +390,14 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
 | `min_price` | float | e.g. 100 |
 | `max_price` | float | e.g. 1000 |
 | `sort` | string | newest, price_asc, price_desc |
+| `page` | int | default 1 |
+| `limit` | int | default 20, max 100 |
+
+**GET /listings/mine query params:**
+
+| Param | Type | Values |
+|---|---|---|
+| `status` | string | active, sold, expired (optional — omit for all) |
 | `page` | int | default 1 |
 | `limit` | int | default 20, max 100 |
 
@@ -399,7 +414,7 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
   "city": "دمشق",
   "status": "active",
   "attrs": {},
-  "image_urls": ["https://media.shamna.com/listings/user-id/uuid.jpg"],
+  "image_urls": ["https://media.shamna.shop/listings/user-id/uuid.jpg"],
   "views": 12,
   "created_at": "2026-04-30T07:58:32Z",
   "expires_at": "2026-05-30T07:58:32Z",
@@ -435,7 +450,7 @@ Interactive docs: `https://shamna-production.up.railway.app/docs`
 ```json
 {
   "upload_url": "https://...r2.cloudflarestorage.com/...?X-Amz-Signature=...",
-  "public_url": "https://media.shamna.com/profiles/user-id.jpg"
+  "public_url": "https://media.shamna.shop/profiles/user-id.jpg"
 }
 ```
 
@@ -455,12 +470,38 @@ Authorization: Bearer <access_token>
 **Phone OTP auth:** No email/password. Syrian phone numbers (+963). Access token in `localStorage` (client API calls) + `session=1` non-httpOnly cookie (Next.js middleware route protection). Refresh token in httpOnly cookie. Post-OTP redirect uses `window.location.href` (not `router.push`) to force a full page load so middleware re-evaluates with the fresh cookie.
 
 **Cookie strategy — two cookies on login:**
-- `refresh_token` — httpOnly, secure in production, `samesite="none"` in production / `"lax"` in dev. Used by `/auth/refresh` to silently renew access tokens.
-- `session` — non-httpOnly, `samesite="lax"`, value `"1"`. Presence signal only — no sensitive data. Readable by Next.js middleware to gate protected routes.
+- `refresh_token` — httpOnly, `secure=True`, `samesite="lax"`, `domain=".shamna.shop"`. Used by `/auth/refresh` to silently renew access tokens.
+- `session` — non-httpOnly, `secure=True`, `samesite="lax"`, `domain=".shamna.shop"`, value `"1"`. Presence signal only — no sensitive data. Readable by Next.js middleware to gate protected routes.
+
+Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root domain and readable by both `www.shamna.shop` (frontend) and `railway.shamna.shop` (API). This is what makes same-site cookie auth work across Vercel and Railway.
+
+**Cookie `secure` flag:** Always `True` in production — both frontend and API are on HTTPS. The `ENVIRONMENT` setting in `config.py` still controls this; Railway has `ENVIRONMENT=production`.
+
+**Cross-domain cookie fix (resolved):** Previously the frontend (Vercel) and API (Railway) were on different root domains, causing the `session` cookie set by the API to not be visible to the Next.js middleware on the frontend. Resolved by wiring both services under `shamna.shop` and setting `domain=".shamna.shop"` on all cookies in `auth.py`.
+
+**Cloudflare R2 CORS:** The R2 bucket (`shamna-listings`) must have a CORS policy allowing `PUT` from `https://www.shamna.shop` and `http://localhost:3000`. The `AllowedHeaders: ["*"]` entry is required because presigned URLs include `content-type` in the signed headers — without it the browser preflight fails.
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://www.shamna.shop", "http://localhost:3000"],
+    "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+**Next.js image domains:** The `next.config.js` `images.remotePatterns` must include the R2 public hostname (`media.shamna.shop`) for `<Image>` to render R2-hosted photos. Without this, Next.js blocks the image and renders a broken icon.
+
+**`/listings/mine` endpoint ordering:** In FastAPI, routes are matched in registration order. `GET /listings/mine` must appear in `listings.py` **before** `GET /listings/{listing_id}`, otherwise the literal string `"mine"` is interpreted as a UUID listing ID and returns a 404.
+
+**My Listings page — client component:** `/my-listings/page.tsx` is a client component (not server) because it needs `localStorage` access for the auth token header, and requires interactive optimistic UI updates (instant removal on delete, instant status badge change on mark-as-sold) without a page reload.
 
 **SQLAlchemy 2.x `Mapped` style:** User model uses `Mapped[type]` + `mapped_column()` annotations instead of the legacy `Column()` style. This is required for Pylance to correctly type-check attribute assignments (e.g. `user.name = "Ahmed"` without errors).
 
-**`ENVIRONMENT` setting:** `config.py` exposes `ENVIRONMENT: str = "development"`. Cookie `secure` flag and `samesite` value are conditioned on this — `secure=False` and `samesite="lax"` in dev, `secure=True` and `samesite="none"` in production. Set `ENVIRONMENT=production` in Railway env vars.
+**`ENVIRONMENT` setting:** `config.py` exposes `ENVIRONMENT: str = "development"`. Cookie `secure` flag is conditioned on this. Set `ENVIRONMENT=production` in Railway env vars.
 
 **JSONB for listing attributes:** Category-specific fields (car mileage, apartment rooms, etc.) go in `attrs` JSONB column — no separate table per category. Flexible from day one.
 
@@ -470,7 +511,7 @@ Authorization: Bearer <access_token>
 
 **`AuthContext` hydration strategy:** On every app mount, `hydrate()` runs once. It checks localStorage for a stored access token, validates it via `GET /auth/me`, and falls back to a silent cookie refresh if expired. Failed refreshes during hydration call `tryRefreshSilently()` (not `refreshToken()`) — this returns null on failure without calling `logout()`, preventing spurious logouts on 404 pages or cold loads.
 
-**Server vs client API calls:** Server components use `API_URL` env var (not exposed to browser). Client components use `NEXT_PUBLIC_API_URL`. Both point to same Railway URL.
+**Server vs client API calls:** Server components use `API_URL` env var (not exposed to browser). Client components use `NEXT_PUBLIC_API_URL`. Both point to `https://railway.shamna.shop`.
 
 **Next.js 15 async params:** `params` in server components is a Promise. Always `const { id } = await params` before use.
 
@@ -480,9 +521,11 @@ Authorization: Bearer <access_token>
 
 **Pydantic v2 settings:** Use `model_config = SettingsConfigDict(env_file=".env")`. Do NOT use the old inner `class Config:` pattern.
 
-**Homepage category data — single source of truth:** The `CATEGORIES` array in `apps/web/app/page.tsx` serves both the `<Hero>` sidebar and each `<CategorySection>` below it. Adding, removing, or reordering a category only requires editing that one array.
+**Homepage category data — single source of truth:** The `CATEGORIES` array in `apps/web/app/page.tsx` serves both the `<Hero>` sidebar and each `<CategorySection>` below it. Adding, removing, or reordering a category only requires editing that one array. CSS gradient strings in `accentColor` must have no spaces (e.g. `linear-gradient(...)` not `linear - gradient(...)`).
 
-**Category images in hero banner:** `HeroCategory` accepts an optional `bannerImage` field (`string`, path under `/public`). When provided, a Next.js `<Image>` renders in the banner instead of the emoji fallback. Save images as WebP, 440×440px, quality 80–85%, transparent background, target under 40KB each.
+**Hero banner image — full-panel background:** `HeroCategory` accepts an optional `bannerImage` field (`string`, path under `/public`). When provided, the image fills the entire center panel as a background layer (using Next.js `<Image fill />` with `objectFit: "cover"`) at `opacity: 0.35` so the gradient and text remain readable. The emoji watermark and inline image are not used when `bannerImage` is set. Recommended export settings: WebP, 880×320px, quality 80%, under 60KB. The emoji-only fallback renders when no `bannerImage` is provided.
+
+**Category mini-grid images:** `category-section.tsx` uses `listing.image_urls?.[0]` (not `listing.images?.[0]`) to render listing thumbnails — the API returns `image_urls`. Using the wrong field silently falls through to the emoji fallback.
 
 **Navbar auth states:** Logged-out shows two buttons (Post an Ad → `/auth?from=/post`, Login → `/auth?from={pathname}`). Logged-in replaces both with an icon row: Bell (`/notifications`), Heart (`/saved`), ClipboardList (`/my-listings`), and avatar circle with dropdown (profile, my listings, logout).
 
@@ -522,13 +565,20 @@ Authorization: Bearer <access_token>
 | User model expanded (bio, standing, warning_reason) | ✅ Done |
 | SQLAlchemy Mapped style migration | ✅ Done |
 | User profile page (inline edit, photo upload, standing badge) | ✅ Done |
-| Auth persistence across page refresh | ✅ Done (context works; middleware blocked by cross-domain cookies — resolves with custom domain) |
-| Custom domain (Vercel + Railway on same domain) | 🔄 In Progress — needed to fully fix middleware cookie auth |
-| Profile page fully functional end-to-end | 🔄 Blocked by cross-domain cookie issue — works once domain is wired |
-| My listings page (owner view, mark as sold, delete) | ⏳ Planned |
+| Custom domain — `www.shamna.shop` + `railway.shamna.shop` | ✅ Done |
+| Auth persistence across page refresh (middleware + cookie fix) | ✅ Done — `domain=".shamna.shop"` on all cookies resolves cross-subdomain issue |
+| Profile page fully functional end-to-end | ✅ Done — unblocked by custom domain |
+| Cloudflare R2 CORS for custom domain | ✅ Done — allows PUT from `www.shamna.shop` |
+| GET /listings/mine endpoint | ✅ Done |
+| DELETE /listings/{id} endpoint | ✅ Done |
+| My listings page (owner view, mark as sold, delete) | ✅ Done |
+| Hero banner — full-panel background image (no emoji overlap) | ✅ Done |
+| Category mini-grid — real listing images (not emoji fallback) | ✅ Done |
 | Saved/starred listings | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Ratings system | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Notifications (bell icon + list) | ⏳ Planned — Phase 1 Profile Phase 2 |
+| Notifications page `/notifications` | ⏳ Planned |
+| Saved listings page `/saved` | ⏳ Planned |
 | Meilisearch integration | ⏳ Planned |
 | Redis + BullMQ | ⏳ Planned |
 | React Native mobile app | ⏳ Phase 2 |
@@ -550,8 +600,8 @@ Authorization: Bearer <access_token>
 - [x] Auth-aware navbar (icon row when logged in, two buttons when logged out)
 - [x] User profile page (inline editing, photo upload, account standing)
 - [x] Homepage visual refactor (3-panel hero + per-category listing sections)
-- [ ] Custom domain → fully unblocks middleware auth + profile page API calls
-- [ ] My listings page (view, mark sold, delete)
+- [x] Custom domain (`www.shamna.shop` + `railway.shamna.shop`) — fully resolves middleware auth
+- [x] My listings page (view, mark sold, delete)
 - [ ] Notifications page (`/notifications`)
 - [ ] Saved listings page (`/saved`)
 - [ ] Profile page Phase 2 (saved listings, ratings, notifications)
@@ -573,30 +623,24 @@ Authorization: Bearer <access_token>
 
 ## Next Session
 
-### Immediate priority: Custom domain setup
-Wire a custom domain so both Vercel and Railway sit under the same root domain (e.g. `shamna.com` and `api.shamna.com`). This resolves the cross-domain cookie issue permanently — no more `samesite="none"`, no more middleware blind spots, profile page API calls will work end to end.
+### Notifications page `/notifications`
+Linked in the navbar icon row but no page exists yet. Needs:
+- A `notifications` table migration (id, user_id, type, message, read, created_at)
+- `GET /notifications` endpoint (current user's notifications, newest first)
+- `PATCH /notifications/{id}/read` or a bulk mark-all-read endpoint
+- Unread count badge on the bell icon in the navbar
+- The page itself: list of notifications with read/unread state, empty state
 
-**What to do:**
-1. Point your domain's DNS to Cloudflare
-2. Add `shamna.com` (or equivalent) to Vercel — Vercel will give you a CNAME/A record to add in Cloudflare
-3. Add `api.shamna.com` as a custom domain in Railway — Railway will give you a CNAME to add in Cloudflare
-4. Update `NEXT_PUBLIC_API_URL` and `API_URL` on Vercel to `https://api.shamna.com`
-5. Update CORS `allow_origins` in FastAPI `main.py` to include `https://shamna.com`
-6. Update R2 bucket CORS to allow the new domain
-7. Change cookie settings: `samesite="lax"` in all environments (same-site now), `secure=True` in production only
-8. Remove the `session=1` workaround cookie — no longer needed
+### Saved listings page `/saved`
+Also linked in the navbar but no page or backend yet. Needs:
+- A `user_saved_listings` join table migration (user_id, listing_id, created_at)
+- `POST /listings/{id}/save` and `DELETE /listings/{id}/save` endpoints
+- A save/unsave button on listing detail pages
+- `GET /listings/saved` endpoint for the current user
+- The `/saved` page: listing cards with unsave action, empty state
 
-### After domain: My listings page
-The `/my-listings` route is linked in the navbar (logged-in icon row) but the page doesn't exist yet. It needs:
-- A server component that fetches `/listings?user_id=me` (or equivalent owner filter on the API)
-- Listing cards with owner actions: **Mark as sold** (PATCH `/listings/{id}/status`) and **Delete** (needs a new DELETE endpoint)
-- Empty state when the user has no listings, with a CTA to post one
-
-### Then: Notifications + Saved listings pages
-Both routes are already linked in the navbar icon row but have no pages yet. These are lightweight — mostly a list UI backed by new API endpoints and migrations.
-
-### Profile page Phase 2 (future session)
+### Profile page Phase 2
 Three features deferred from the initial profile page build — each needs its own migration + endpoints + UI:
-- **Saved/starred listings** — `user_saved_listings` join table, save/unsave endpoint, saved tab on profile
+- **Saved/starred listings** — saved tab on profile pulling from `user_saved_listings`
 - **Ratings** — `ratings` table, post-transaction review flow, aggregate score on profile
-- **Notifications** — `notifications` table, unread count in navbar, notification list on profile
+- **Notifications** — notification list on profile, unread count in navbar
