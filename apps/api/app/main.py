@@ -8,7 +8,11 @@ app = FastAPI(title="شامنا API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://marketplace-mu-beryl.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://shamna-production.up.railway.app",  
+        "https://www.shamna.shop"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

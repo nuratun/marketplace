@@ -116,21 +116,20 @@ shamna/
 │   │   │   ├── profile/            ← User profile page (inline editable fields)
 │   │   │   │   └── page.tsx        ← Name, email, bio, profile pic, standing badge
 │   │   │   ├── layout.tsx          ← Root layout: IBM Plex Sans Arabic, RTL, AuthProvider, Navbar + Footer
-│   │   │   ├── page.tsx            ← Homepage: Hero + CategoryGrid + RecentListings
+│   │   │   ├── page.tsx            ← Homepage: Hero + per-category listing sections
 │   │   │   └── globals.css         ← CSS vars: brand, surface, border, text colors
 │   │   ├── components/
 │   │   │   ├── post/               ← step-indicator, step-category, step-details,
 │   │   │   │                          step-photos, step-review
-│   │   │   ├── navbar.tsx          ← Auth-aware: shows user dropdown or login button
+│   │   │   ├── navbar.tsx          ← Auth-aware: logged-out = two buttons; logged-in = icon row + avatar dropdown
 │   │   │   ├── footer.tsx
-│   │   │   ├── hero.tsx            ← Large search bar with routing
-│   │   │   ├── category-grid.tsx   ← 6-category icon grid
+│   │   │   ├── hero.tsx            ← 3-panel layout: category sidebar (hover) + animated banner + post-ad promo card
+│   │   │   ├── category-section.tsx ← Per-category block: colored feature card + 2×4 mini listing grid
 │   │   │   ├── listing-card.tsx    ← Grid card (homepage + category page)
 │   │   │   ├── listing-list-card.tsx ← Horizontal card for list view
 │   │   │   ├── listing-gallery.tsx ← Image carousel with thumbnails
 │   │   │   ├── category-filters.tsx ← URL-based filters: condition, city, price, sort
 │   │   │   ├── view-toggle.tsx     ← Grid/list toggle
-│   │   │   ├── recent-listings.tsx ← Async server component, fetches /listings
 │   │   │   ├── phone-reveal.tsx    ← Reveal phone button + WhatsApp button
 │   │   │   └── report-button.tsx
 │   │   ├── contexts/
@@ -481,6 +480,12 @@ Authorization: Bearer <access_token>
 
 **Pydantic v2 settings:** Use `model_config = SettingsConfigDict(env_file=".env")`. Do NOT use the old inner `class Config:` pattern.
 
+**Homepage category data — single source of truth:** The `CATEGORIES` array in `apps/web/app/page.tsx` serves both the `<Hero>` sidebar and each `<CategorySection>` below it. Adding, removing, or reordering a category only requires editing that one array.
+
+**Category images in hero banner:** `HeroCategory` accepts an optional `bannerImage` field (`string`, path under `/public`). When provided, a Next.js `<Image>` renders in the banner instead of the emoji fallback. Save images as WebP, 440×440px, quality 80–85%, transparent background, target under 40KB each.
+
+**Navbar auth states:** Logged-out shows two buttons (Post an Ad → `/auth?from=/post`, Login → `/auth?from={pathname}`). Logged-in replaces both with an icon row: Bell (`/notifications`), Heart (`/saved`), ClipboardList (`/my-listings`), and avatar circle with dropdown (profile, my listings, logout).
+
 ---
 
 ## Development Status
@@ -496,7 +501,10 @@ Authorization: Bearer <access_token>
 | Next.js app + Vercel deploy | ✅ Done |
 | Arabic/RTL layout + font | ✅ Done |
 | Navbar + footer | ✅ Done |
+| Navbar auth-aware (icon row when logged in, two buttons when logged out) | ✅ Done |
 | Homepage — real API data | ✅ Done |
+| Homepage — hero 3-panel layout (category sidebar + animated banner + promo card) | ✅ Done |
+| Homepage — per-category listing sections (feature card + 2×4 mini grid) | ✅ Done |
 | Category page + filters + view toggle — real API | ✅ Done |
 | Listing detail page — real API | ✅ Done |
 | Post an ad form (multi-step wizard UI) | ✅ Done |
@@ -507,7 +515,6 @@ Authorization: Bearer <access_token>
 | Image upload — listings (Cloudflare R2) | ✅ Done |
 | AuthContext (user state, login, logout, hydration) | ✅ Done |
 | Silent token refresh (tryRefreshSilently) | ✅ Done |
-| Navbar auth-aware (user dropdown, post ad button) | ✅ Done |
 | GET /auth/me endpoint | ✅ Done |
 | PUT /auth/me endpoint (name, email, bio) | ✅ Done |
 | PUT /auth/me/profile-pic endpoint | ✅ Done |
@@ -518,11 +525,10 @@ Authorization: Bearer <access_token>
 | Auth persistence across page refresh | ✅ Done (context works; middleware blocked by cross-domain cookies — resolves with custom domain) |
 | Custom domain (Vercel + Railway on same domain) | 🔄 In Progress — needed to fully fix middleware cookie auth |
 | Profile page fully functional end-to-end | 🔄 Blocked by cross-domain cookie issue — works once domain is wired |
-| My listings page (owner view, mark as sold) | ⏳ Planned |
-| Visual layout polish | ⏳ Planned (next session) |
-| Saved/starred listings (users + listings join table) | ⏳ Planned — Phase 1 Profile Phase 2 |
+| My listings page (owner view, mark as sold, delete) | ⏳ Planned |
+| Saved/starred listings | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Ratings system | ⏳ Planned — Phase 1 Profile Phase 2 |
-| Notifications | ⏳ Planned — Phase 1 Profile Phase 2 |
+| Notifications (bell icon + list) | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Meilisearch integration | ⏳ Planned |
 | Redis + BullMQ | ⏳ Planned |
 | React Native mobile app | ⏳ Phase 2 |
@@ -541,11 +547,13 @@ Authorization: Bearer <access_token>
 - [x] Full frontend shell (homepage, category, detail, post form)
 - [x] Post form submission + image upload (R2)
 - [x] AuthContext + silent token refresh
-- [x] Auth-aware navbar with user dropdown
+- [x] Auth-aware navbar (icon row when logged in, two buttons when logged out)
 - [x] User profile page (inline editing, photo upload, account standing)
+- [x] Homepage visual refactor (3-panel hero + per-category listing sections)
 - [ ] Custom domain → fully unblocks middleware auth + profile page API calls
-- [ ] My listings page
-- [ ] Visual layout polish
+- [ ] My listings page (view, mark sold, delete)
+- [ ] Notifications page (`/notifications`)
+- [ ] Saved listings page (`/saved`)
 - [ ] Profile page Phase 2 (saved listings, ratings, notifications)
 - [ ] Search (Meilisearch)
 
@@ -578,14 +586,14 @@ Wire a custom domain so both Vercel and Railway sit under the same root domain (
 7. Change cookie settings: `samesite="lax"` in all environments (same-site now), `secure=True` in production only
 8. Remove the `session=1` workaround cookie — no longer needed
 
-### After domain: Visual layout polish
-The next development session will focus on UI/UX improvements across the app. Areas to review:
-- Homepage hero section
-- Listing card design (grid + list views)
-- Category page layout
-- Listing detail page
-- Profile page polish
-- Mobile responsiveness across all pages
+### After domain: My listings page
+The `/my-listings` route is linked in the navbar (logged-in icon row) but the page doesn't exist yet. It needs:
+- A server component that fetches `/listings?user_id=me` (or equivalent owner filter on the API)
+- Listing cards with owner actions: **Mark as sold** (PATCH `/listings/{id}/status`) and **Delete** (needs a new DELETE endpoint)
+- Empty state when the user has no listings, with a CTA to post one
+
+### Then: Notifications + Saved listings pages
+Both routes are already linked in the navbar icon row but have no pages yet. These are lightweight — mostly a list UI backed by new API endpoints and migrations.
 
 ### Profile page Phase 2 (future session)
 Three features deferred from the initial profile page build — each needs its own migration + endpoints + UI:
