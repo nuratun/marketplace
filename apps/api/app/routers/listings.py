@@ -170,6 +170,31 @@ def list_listings(
         ]
     }
 
+@router.get("/mine", dependencies=[])
+def get_my_listings(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(Listing).filter(Listing.user_id == current_user.id)
+
+    if status:
+        query = query.filter(Listing.status == status)
+
+    query = query.order_by(desc(Listing.created_at))
+
+    total = query.count()
+    listings = query.offset((page - 1) * limit).limit(limit).all()
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": -(-total // limit),
+        "results": [serialize_listing(l, current_user) for l in listings]
+    }
 
 @router.get("/{listing_id}")
 def get_listing(
@@ -189,6 +214,20 @@ def get_listing(
     seller = db.query(User).filter(User.id == listing.user_id).first()
     return serialize_listing(listing, seller)
 
+@router.delete("/{listing_id}", status_code=204)
+def delete_listing(
+    listing_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if listing.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your listing")
+
+    db.delete(listing)
+    db.commit()
 
 @router.patch("/{listing_id}/status")
 def update_listing_status(
@@ -209,7 +248,6 @@ def update_listing_status(
     listing.status = body.status
     db.commit()
     return {"message": "Status updated", "status": listing.status}
-
 
 @router.get("/{listing_id}/phone")
 def reveal_phone(

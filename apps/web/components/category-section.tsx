@@ -203,7 +203,7 @@ export default async function CategorySection({ category }: Props) {
                       fontFamily: "var(--font-arabic)",
                     }}
                   >
-                    {listing.price.toLocaleString("ar-SY")} $
+                    {listing.price.toLocaleString("en-US")} $
                   </p>
                 )}
                 {listing.city && (
