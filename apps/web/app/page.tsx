@@ -1,4 +1,3 @@
-// import { HERO_CATEGORIES } from "@/lib/utils"
 import Hero, { type HeroCategory } from "@/components/hero"
 import CategorySection, { type SectionCategory } from "@/components/category-section"
 
@@ -52,7 +51,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-clothing.jpg",
     bannerHeading: "اعثري على إطلالتكِ المثالية",
     bannerSubtext: "",
-    accentColor: "linear - gradient(135deg, #1a3a2e 0 %, #F9E6FF 100%)",
+    accentColor: "linear - gradient(135deg, #1a3a2e 0%, #F9E6FF 100%)",
     description: "ملابس وإكسسوارات وأحذية لكل الأذواق",
   },
   {
@@ -62,7 +61,7 @@ const CATEGORIES: (HeroCategory & SectionCategory)[] = [
     bannerImage: "/categories/category-jobs.jpg",
     bannerHeading: "ابحث عن وظيفتك التالية",
     bannerSubtext: "",
-    accentColor: "linear - gradient(135deg, #1a3a2e 0 %, #E6FFF6 100 %)",
+    accentColor: "linear - gradient(135deg, #1a3a2e 0%, #E6FFF6 100%)",
     description: "أعلن عن خدمتك أو ابحث عن فرصة عمل",
   }
 ]
