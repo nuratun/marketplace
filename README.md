@@ -202,9 +202,9 @@ R2_PUBLIC_URL=https://media.shamna.com   # or your r2.dev subdomain URL
 ### `apps/web/.env.local`
 
 ```env
-NEXT_PUBLIC_API_URL=https://shamna-production.up.railway.app
-API_URL=https://shamna-production.up.railway.app
-R2_PUBLIC_URL=https://media.shamna.com
+NEXT_PUBLIC_API_URL=https://railway.shamna.shop
+API_URL=https://railway.shamna.shop
+R2_PUBLIC_URL=https://media.shamna.shop
 ```
 
 > `NEXT_PUBLIC_API_URL` is used by client components. `API_URL` is used by server components and is not exposed to the browser.

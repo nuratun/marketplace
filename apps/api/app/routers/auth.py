@@ -128,18 +128,20 @@ def verify_otp(body: OTPVerifyRequest, response: Response, db: Session = Depends
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=settings.ENVIRONMENT == "production",
-        samesite="none" if settings.ENVIRONMENT == "production" else "lax",
-        max_age=60 * 60 * 24 * 30
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        domain=".shamna.shop"
     )
 
     response.set_cookie(
         key="session",
-        value="1",  # just a presence signal, no sensitive data
-        httponly=False,  # readable by middleware
-        secure=settings.ENVIRONMENT == "production",
-        samesite="lax",  # works cross-site for navigation requests
+        value="1",
+        httponly=False,
+        secure=True,
+        samesite="lax",
         max_age=60 * 60 * 24 * 30,
+        domain=".shamna.shop"
     )
 
     return {
@@ -175,9 +177,10 @@ def refresh(response: Response, refresh_token: str = Cookie(None), db: Session =
             key="session",
             value="1",
             httponly=False,
-            secure=settings.ENVIRONMENT == "production",
+            secure=True, 
             samesite="lax",
             max_age=60 * 60 * 24 * 30,
+            domain=".shamna.shop"
         )
         return { "access_token": create_access_token(str(user.id)) }
     except Exception:
