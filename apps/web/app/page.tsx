@@ -1,6 +1,8 @@
 import Hero, { type HeroCategory } from "@/components/hero"
 import CategorySection, { type SectionCategory } from "@/components/category-section"
 
+export const revalidate = 60 // Due to Next.js aggressive caching, re-render the homepage every minute
+
 // Categories drive both the Hero sidebar and the per-category sections below.
 // Add, remove, or reorder entries here to control what appears on the homepage.
 const CATEGORIES: (HeroCategory & SectionCategory)[] = [
