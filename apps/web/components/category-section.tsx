@@ -21,7 +21,7 @@ export default async function CategorySection({ category }: Props) {
 
   try {
     data = await apiFetch<ListingsResponse>(
-      `/listings?category=${category.slug}&limit=8&sort=newest`
+      `/listings?category=${category.slug}&limit=8&sort=newest`, { next: { revalidate: 60 } }
     )
   } catch (e) {
     console.error(`CategorySection fetch failed for ${category.slug}:`, e)
