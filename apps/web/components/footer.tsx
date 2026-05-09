@@ -9,7 +9,7 @@ export default function Footer() {
       }}
     >
       <div className="max-w-6xl mx-auto px-4">
-        <p>{" شامنا — جميع الحقوق محفوظة "} – © {new Date().getFullYear()}</p>
+        <p>Shamna — All Rights Reserved – © {new Date().getFullYear()}</p>
       </div>
     </footer>
   )

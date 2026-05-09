@@ -7,6 +7,7 @@ import ListingGallery from "@/components/listing-gallery"
 import PhoneReveal from "@/components/phone-reveal"
 import ReportButton from "@/components/report-button"
 import ListingCard from "@/components/listing-card"
+import SaveButton from "@/components/save-button"
 
 const categoryLabels: Record<string, string> = {
   "real-estate": "عقارات",
@@ -50,7 +51,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 const conditionLabels: Record<string, string> = {
   new: "جديد",
-  used: "مستعمل",
+  used: "مستعمل"
 }
 
 export default async function ListingDetailPage({ params }: {
@@ -115,10 +116,13 @@ export default async function ListingDetailPage({ params }: {
         <p className="text-2xl font-bold mb-3" style={{ color: "var(--color-brand)" }}>
           {listing.price.toLocaleString("en-US")} {listing.currency}
         </p>
-        <div className="flex gap-4 text-xs" style={{ color: "var(--color-text-muted)" }}>
-          <span>📍 {listing.city}</span>
-          <span>🕐 {timeAgo(listing.created_at)}</span>
-          <span>👁 {listing.views} مشاهدة</span>
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex gap-4 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            <span>📍 {listing.city}</span>
+            <span>🕐 {timeAgo(listing.created_at)}</span>
+            <span>👁 {listing.views} مشاهدة</span>
+          </div>
+          <SaveButton listingId={id} variant="full" />
         </div>
       </Card>
 

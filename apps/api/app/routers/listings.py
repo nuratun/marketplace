@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.listing import Listing
 from app.models.user import User
 from app.core.dependencies import get_current_user, get_optional_user
+from app.models.saved_listing import SavedListing
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -196,6 +197,54 @@ def get_my_listings(
         "results": [serialize_listing(l, current_user) for l in listings]
     }
 
+@router.get("/saved", dependencies=[])
+def get_saved_listings(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns all listings saved by the current user, newest save first."""
+    saved_rows = (
+        db.query(SavedListing)
+        .filter(SavedListing.user_id == current_user.id)
+        .order_by(SavedListing.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+ 
+    total = (
+        db.query(SavedListing)
+        .filter(SavedListing.user_id == current_user.id)
+        .count()
+    )
+ 
+    listing_ids = [row.listing_id for row in saved_rows]
+    listings = db.query(Listing).filter(Listing.id.in_(listing_ids)).all()
+ 
+    # Preserve the save order (newest first)
+    listing_map = {l.id: l for l in listings}
+    ordered = [listing_map[lid] for lid in listing_ids if lid in listing_map]
+ 
+    user_ids = [l.user_id for l in ordered]
+    sellers = {
+        u.id: u
+        for u in db.query(User).filter(User.id.in_(user_ids)).all()
+    }
+ 
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": -(-total // limit),
+        "results": [
+            serialize_listing(l, sellers[l.user_id])
+            for l in ordered
+            if l.user_id in sellers
+        ]
+    }
+
 @router.get("/{listing_id}")
 def get_listing(
     listing_id: str,
@@ -261,3 +310,50 @@ def reveal_phone(
 
     seller = db.query(User).filter(User.id == listing.user_id).first()
     return { "phone": seller.phone }
+
+@router.post("/{listing_id}/save", status_code=201)
+def save_listing(
+    listing_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+ 
+    # Idempotent: already saved → just return success
+    existing = (
+        db.query(SavedListing)
+        .filter(
+            SavedListing.user_id == current_user.id,
+            SavedListing.listing_id == listing.id,
+        )
+        .first()
+    )
+    if existing:
+        return {"saved": True}
+ 
+    saved = SavedListing(user_id=current_user.id, listing_id=listing.id)
+    db.add(saved)
+    db.commit()
+    return {"saved": True}
+ 
+ 
+@router.delete("/{listing_id}/save", status_code=200)
+def unsave_listing(
+    listing_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    saved = (
+        db.query(SavedListing)
+        .filter(
+            SavedListing.user_id == current_user.id,
+            SavedListing.listing_id == listing_id,
+        )
+        .first()
+    )
+    if saved:
+        db.delete(saved)
+        db.commit()
+    return {"saved": False}

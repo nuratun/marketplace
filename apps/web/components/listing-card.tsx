@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Listing } from "@/types/listing"
+import SaveButton from "@/components/save-button"
 
 const categoryIcons: Record<string, { icon: string; color: string }> = {
   "real-estate": { icon: "🏠", color: "#FFF0E6" },
@@ -7,7 +8,7 @@ const categoryIcons: Record<string, { icon: string; color: string }> = {
   electronics: { icon: "📱", color: "#E6FAF0" },
   furniture: { icon: "🛋️", color: "#FFF8E6" },
   clothing: { icon: "👗", color: "#F9E6FF" },
-  jobs: { icon: "💼", color: "#E6FFF6" },
+  jobs: { icon: "💼", color: "#E6FFF6" }
 }
 
 const categoryLabels: Record<string, string> = {
@@ -16,7 +17,7 @@ const categoryLabels: Record<string, string> = {
   electronics: "إلكترونيات",
   furniture: "أثاث ومنزل",
   clothing: "ملابس",
-  jobs: "وظائف وخدمات",
+  jobs: "وظائف وخدمات"
 }
 
 function timeAgo(dateStr: string) {
@@ -37,11 +38,13 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         background: "#fff",
         border: "1px solid var(--color-border)",
         fontFamily: "var(--font-arabic)",
+        position: "relative" // needed for the absolute-positioned save button
       }}
     >
+      {/* Image / placeholder */}
       <div
         className="h-36 flex items-center justify-center text-4xl"
-        style={{ background: listing.image_urls[0] ? undefined : meta.color }}
+        style={{ background: listing.image_urls[0] ? undefined : meta.color, position: "relative" }}
       >
         {listing.image_urls[0] ? (
           <img
@@ -52,7 +55,16 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         ) : (
           meta.icon
         )}
+
+        {/* Save button — top-left corner (RTL: visually top-end) */}
+        <div
+          style={{ position: "absolute", top: "8px", left: "8px" }}
+        // stopPropagation is handled inside SaveButton itself
+        >
+          <SaveButton listingId={listing.id} variant="icon" />
+        </div>
       </div>
+
       <div className="p-3">
         <span
           className="inline-block text-xs px-2 py-0.5 rounded-full mb-1"
