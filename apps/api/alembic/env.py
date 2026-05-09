@@ -30,6 +30,7 @@ from app.db.base import Base
 from app.models.user import User          # noqa: F401
 from app.models.listing import Listing    # noqa: F401
 from app.models.saved_listing import SavedListing  # noqa: F401
+from app.models.notification import Notification, NotificationThread, NotificationMessage
 
 target_metadata = Base.metadata
 

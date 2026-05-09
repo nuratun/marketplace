@@ -31,6 +31,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 - Arabic-first design with full RTL layout
 - Image uploads per listing and profile photos (Cloudflare R2 — live)
 - My Listings page — view, mark as sold, delete your own listings
+- Save/unsave listings — heart button on cards and detail pages, `/saved` page
 - Mobile app (React Native) planned for phase 2
 - Business/advertiser login planned for a later phase
 
@@ -93,17 +94,20 @@ shamna/
 │   │   │   │   ├── dependencies.py ← get_current_user / get_optional_user
 │   │   │   │   └── r2.py           ← R2 client, generate_presigned_upload, public_url
 │   │   │   ├── db/
-│   │   │   │   ├── base.py         ← SQLAlchemy DeclarativeBase
+│   │   │   │   ├── base.py         ← SQLAlchemy DeclarativeBase only — no model imports
 │   │   │   │   └── session.py      ← engine, SessionLocal, get_db
 │   │   │   ├── models/
 │   │   │   │   ├── user.py         ← User model (Mapped style)
 │   │   │   │   ├── otp.py          ← OTPCode model
-│   │   │   │   └── listing.py      ← Listing model
+│   │   │   │   ├── listing.py      ← Listing model
+│   │   │   │   └── saved_listing.py ← SavedListing model (user_saved_listings table)
 │   │   │   ├── routers/
 │   │   │   │   ├── auth.py         ← /auth/* endpoints including /auth/me (GET + PUT)
-│   │   │   │   ├── listings.py     ← /listings CRUD + /listings/mine + phone reveal + delete
+│   │   │   │   ├── listings.py     ← /listings CRUD + /listings/mine + /listings/saved + save/unsave + phone reveal + delete
 │   │   │   │   └── uploads.py      ← /uploads/presign + /uploads/presign-profile
 │   │   │   └── main.py             ← FastAPI app, CORS, router registration
+│   │   ├── alembic/
+│   │   │   └── env.py              ← imports all models for autogenerate detection
 │   │   ├── alembic.ini
 │   │   ├── Procfile                ← Railway: uvicorn app.main:app
 │   │   └── pyproject.toml          ← Python dependencies (managed by uv)
@@ -114,6 +118,8 @@ shamna/
 │   │   │   ├── listing/[id]/       ← Listing detail page (server component)
 │   │   │   ├── my-listings/        ← Owner listing management page
 │   │   │   │   └── page.tsx        ← View all own listings, mark as sold, delete
+│   │   │   ├── saved/              ← Saved listings page
+│   │   │   │   └── page.tsx        ← Grid of saved listings, empty state, auth-gated
 │   │   │   ├── post/               ← Multi-step post an ad wizard
 │   │   │   │   └── page.tsx        ← Owns all form state, handles submit to /listings
 │   │   │   ├── profile/            ← User profile page (inline editable fields)
@@ -128,11 +134,12 @@ shamna/
 │   │   │   ├── footer.tsx
 │   │   │   ├── hero.tsx            ← 3-panel layout: category sidebar (hover) + animated banner + post-ad promo card
 │   │   │   ├── category-section.tsx ← Per-category block: colored feature card + 2×4 mini listing grid
-│   │   │   ├── listing-card.tsx    ← Grid card (homepage + category page)
+│   │   │   ├── listing-card.tsx    ← Grid card (homepage + category page) — includes SaveButton overlay
 │   │   │   ├── listing-list-card.tsx ← Horizontal card for list view
 │   │   │   ├── listing-gallery.tsx ← Image carousel with thumbnails
 │   │   │   ├── category-filters.tsx ← URL-based filters: condition, city, price, sort
 │   │   │   ├── view-toggle.tsx     ← Grid/list toggle
+│   │   │   ├── save-button.tsx     ← Client component: heart toggle, two variants (icon overlay / full button)
 │   │   │   ├── phone-reveal.tsx    ← Reveal phone button + WhatsApp button
 │   │   │   └── report-button.tsx
 │   │   ├── contexts/
@@ -142,7 +149,7 @@ shamna/
 │   │   ├── types/
 │   │   │   ├── listing.ts          ← Listing, Seller, ListingsResponse types
 │   │   │   └── post.ts             ← PostFormData, EMPTY_POST_FORM
-│   │   └── middleware.ts           ← Protects /post, /profile, /my-listings routes
+│   │   └── middleware.ts           ← Protects /post, /profile, /my-listings, /saved routes
 │   └── mobile/                     ← React Native stub (phase 2)
 ├── .github/
 │   └── workflows/
@@ -259,8 +266,7 @@ uv run alembic upgrade head
 
 ```bash
 cd apps/api
-uv run alembic revision -m "describe your change"
-# fill in upgrade() and downgrade() in the generated file
+uv run alembic revision --autogenerate -m "describe your change"
 uv run alembic upgrade head
 ```
 
@@ -275,6 +281,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `users` | id, phone, name, email, bio, profile_pic, user_type, standing, warning_reason, is_active, created_at |
 | `otp_codes` | phone, code, used, expires_at, created_at |
 | `listings` | Full listing record — see columns below |
+| `user_saved_listings` | user_id, listing_id, created_at — unique constraint on (user_id, listing_id) |
 
 ### Users table columns
 
@@ -313,12 +320,23 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `created_at` | DateTime | |
 | `updated_at` | DateTime | |
 
+### user_saved_listings table columns
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | FK → users.id, CASCADE delete, indexed |
+| `listing_id` | UUID | FK → listings.id, CASCADE delete, indexed |
+| `created_at` | DateTime | |
+| — | UniqueConstraint | `(user_id, listing_id)` — one save per user per listing |
+
 ### Migration history
 
 | Revision | Description |
 |---|---|
 | `8a5d4dc3c4c1` | Initial — users, otp_codes, listings tables |
 | `1.2_user_profile_fields` | Add bio, standing, warning_reason to users |
+| `add_user_saved_listings` | Add user_saved_listings join table |
 
 ---
 
@@ -373,12 +391,15 @@ Interactive docs: `https://railway.shamna.shop/docs`
 | GET | `/listings` | No | List with filters + pagination |
 | POST | `/listings` | Required | Create a listing |
 | GET | `/listings/mine` | Required | Get all listings owned by current user |
+| GET | `/listings/saved` | Required | Get all listings saved by current user |
 | GET | `/listings/{id}` | Optional | Get listing detail (increments views) |
 | PATCH | `/listings/{id}/status` | Required (owner only) | Mark as sold |
 | DELETE | `/listings/{id}` | Required (owner only) | Hard delete a listing |
 | GET | `/listings/{id}/phone` | Required | Reveal seller phone number |
+| POST | `/listings/{id}/save` | Required | Save a listing (idempotent) |
+| DELETE | `/listings/{id}/save` | Required | Unsave a listing |
 
-> ⚠️ Route order matters in FastAPI: `/listings/mine` must be registered **before** `/listings/{id}` in `listings.py`, otherwise the string `"mine"` is matched as a listing ID.
+> ⚠️ Route order matters in FastAPI: `/listings/mine` and `/listings/saved` must be registered **before** `/listings/{id}` in `listings.py`, otherwise the literal strings `"mine"` and `"saved"` are matched as listing IDs and return 404s.
 
 **GET /listings query params:**
 
@@ -400,6 +421,16 @@ Interactive docs: `https://railway.shamna.shop/docs`
 | `status` | string | active, sold, expired (optional — omit for all) |
 | `page` | int | default 1 |
 | `limit` | int | default 20, max 100 |
+
+**POST /listings/{id}/save response:**
+```json
+{ "saved": true }
+```
+
+**DELETE /listings/{id}/save response:**
+```json
+{ "saved": false }
+```
 
 **Listing object shape:**
 ```json
@@ -495,11 +526,21 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 **Next.js image domains:** The `next.config.js` `images.remotePatterns` must include the R2 public hostname (`media.shamna.shop`) for `<Image>` to render R2-hosted photos. Without this, Next.js blocks the image and renders a broken icon.
 
-**`/listings/mine` endpoint ordering:** In FastAPI, routes are matched in registration order. `GET /listings/mine` must appear in `listings.py` **before** `GET /listings/{listing_id}`, otherwise the literal string `"mine"` is interpreted as a UUID listing ID and returns a 404.
+**`/listings/mine` and `/listings/saved` endpoint ordering:** In FastAPI, routes are matched in registration order. `GET /listings/mine` and `GET /listings/saved` must appear in `listings.py` **before** `GET /listings/{listing_id}`, otherwise the literal strings `"mine"` and `"saved"` are interpreted as UUID listing IDs and return 404s.
 
 **My Listings page — client component:** `/my-listings/page.tsx` is a client component (not server) because it needs `localStorage` access for the auth token header, and requires interactive optimistic UI updates (instant removal on delete, instant status badge change on mark-as-sold) without a page reload.
 
-**SQLAlchemy 2.x `Mapped` style:** User model uses `Mapped[type]` + `mapped_column()` annotations instead of the legacy `Column()` style. This is required for Pylance to correctly type-check attribute assignments (e.g. `user.name = "Ahmed"` without errors).
+**SaveButton — isolated client component:** `save-button.tsx` is a `"use client"` component intentionally kept separate from `listing-card.tsx` and `listing/[id]/page.tsx`, both of which are server components. This avoids converting the entire card or detail page to a client component just for one interactive element. The button uses `e.preventDefault()` + `e.stopPropagation()` to prevent the parent `<Link>` from navigating when the heart is tapped on a card.
+
+**SaveButton auth redirect:** Unauthenticated users who tap the heart are redirected to `/auth?from=/listing/{id}` — after login they land back on the listing. Authenticated users get an optimistic toggle (state flips immediately, rolls back on API failure).
+
+**SaveButton initial state:** The heart always renders unfilled on page load because category pages are server components with no user context — there's no cheap way to know which listings the current user has saved at render time. The filled/unfilled state becomes accurate after the user interacts. A future optimization is to fetch `/listings/saved` server-side on authenticated requests and pass the saved IDs as props.
+
+**`db/base.py` — models must NOT be imported here:** `base.py` only defines `DeclarativeBase`. Model imports belong in `alembic/env.py` (for autogenerate detection), not in `base.py`. Importing models in `base.py` creates a circular import: `user.py` imports `Base` from `base.py`, and if `base.py` imports `User` from `user.py`, Python partially initializes `user.py` before `Base` is defined — crashing with `ImportError: cannot import name 'User' from partially initialized module`.
+
+**SQLAlchemy 2.x `Mapped` style:** User model uses `Mapped[type]` + `mapped_column()` annotations instead of the legacy `Column()` style. This is required for Pylance to correctly type-check attribute assignments (e.g. `user.name = "Ahmed"` without errors). New models (`SavedListing`) follow the same `Mapped` style for consistency.
+
+**`__table_args__` with a single constraint:** When `__table_args__` is a tuple containing constraints (e.g. `UniqueConstraint`), SQLAlchemy requires an empty dict `{}` as the last element of the tuple — e.g. `(UniqueConstraint(...), {})`. Without it, SQLAlchemy raises `ArgumentError: __table_args__ value must be a tuple, dict, or None`.
 
 **`ENVIRONMENT` setting:** `config.py` exposes `ENVIRONMENT: str = "development"`. Cookie `secure` flag is conditioned on this. Set `ENVIRONMENT=production` in Railway env vars.
 
@@ -574,11 +615,16 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 | My listings page (owner view, mark as sold, delete) | ✅ Done |
 | Hero banner — full-panel background image (no emoji overlap) | ✅ Done |
 | Category mini-grid — real listing images (not emoji fallback) | ✅ Done |
-| Saved/starred listings | ⏳ Planned — Phase 1 Profile Phase 2 |
+| Saved listings — user_saved_listings migration | ✅ Done |
+| Saved listings — POST/DELETE /listings/{id}/save endpoints | ✅ Done |
+| Saved listings — GET /listings/saved endpoint | ✅ Done |
+| Saved listings — SaveButton component (icon + full variants) | ✅ Done |
+| Saved listings — heart overlay on listing cards (category page) | ✅ Done |
+| Saved listings — full save button on listing detail page | ✅ Done |
+| Saved listings — /saved page with empty state | ✅ Done |
 | Ratings system | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Notifications (bell icon + list) | ⏳ Planned — Phase 1 Profile Phase 2 |
 | Notifications page `/notifications` | ⏳ Planned |
-| Saved listings page `/saved` | ⏳ Planned |
 | Meilisearch integration | ⏳ Planned |
 | Redis + BullMQ | ⏳ Planned |
 | React Native mobile app | ⏳ Phase 2 |
@@ -602,9 +648,9 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 - [x] Homepage visual refactor (3-panel hero + per-category listing sections)
 - [x] Custom domain (`www.shamna.shop` + `railway.shamna.shop`) — fully resolves middleware auth
 - [x] My listings page (view, mark sold, delete)
+- [x] Saved listings (heart button on cards + detail page, `/saved` page)
 - [ ] Notifications page (`/notifications`)
-- [ ] Saved listings page (`/saved`)
-- [ ] Profile page Phase 2 (saved listings, ratings, notifications)
+- [ ] Profile page Phase 2 (ratings, notifications, saved tab)
 - [ ] Search (Meilisearch)
 
 ### Phase 2 — Pre-launch
@@ -631,16 +677,9 @@ Linked in the navbar icon row but no page exists yet. Needs:
 - Unread count badge on the bell icon in the navbar
 - The page itself: list of notifications with read/unread state, empty state
 
-### Saved listings page `/saved`
-Also linked in the navbar but no page or backend yet. Needs:
-- A `user_saved_listings` join table migration (user_id, listing_id, created_at)
-- `POST /listings/{id}/save` and `DELETE /listings/{id}/save` endpoints
-- A save/unsave button on listing detail pages
-- `GET /listings/saved` endpoint for the current user
-- The `/saved` page: listing cards with unsave action, empty state
-
 ### Profile page Phase 2
-Three features deferred from the initial profile page build — each needs its own migration + endpoints + UI:
-- **Saved/starred listings** — saved tab on profile pulling from `user_saved_listings`
+Two features deferred from the initial profile page build — each needs its own migration + endpoints + UI:
 - **Ratings** — `ratings` table, post-transaction review flow, aggregate score on profile
 - **Notifications** — notification list on profile, unread count in navbar
+
+> Note: Saved listings tab on the profile page can now pull from `GET /listings/saved` — the backend is already in place.

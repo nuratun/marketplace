@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.db.session import SessionLocal
-from app.routers import auth, listings, uploads
+from app.routers import auth, listings, notifications, uploads
 
 app = FastAPI(title="شامنا API")
 
@@ -11,7 +11,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://shamna-production.up.railway.app",  
-        "https://www.shamna.shop"
+        "https://www.shamna.shop",
+        "https://shamna.shop"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -21,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(listings.router)
 app.include_router(uploads.router)
+app.include_router(notifications.router, prefix="")
 
 @app.get("/health")
 def health():
