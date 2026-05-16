@@ -62,7 +62,6 @@ def _refresh_user_stats(db: Session, user_id: uuid.UUID) -> None:
         )
     db.commit()
 
-
 # ── POST /listings/{listing_id}/rate ─────────────────────────────────────────
 
 @router.post("/listings/{listing_id}/rate", response_model=RatingOut, status_code=201)

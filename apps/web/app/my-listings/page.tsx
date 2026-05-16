@@ -5,31 +5,9 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
+import { timeAgo, categoryLabels, statusStyles } from "@/lib/utils"
 import { getApiBaseUrl, getAuthHeaders } from "@/lib/api"
 import { type Listing } from "@/types/listing"
-
-const categoryLabels: Record<string, string> = {
-  "real-estate": "عقارات",
-  cars: "سيارات",
-  electronics: "إلكترونيات",
-  furniture: "أثاث ومنزل",
-  clothing: "ملابس",
-  jobs: "وظائف وخدمات"
-}
-
-const statusStyles: Record<string, { label: string; bg: string; color: string }> = {
-  active: { label: "نشط", bg: "#E6FAF0", color: "#0F6E56" },
-  sold: { label: "مباع", bg: "#FFF3E0", color: "#E65100" },
-  expired: { label: "منتهي", bg: "#F5F5F5", color: "#757575" }
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const h = Math.floor(diff / 3600000)
-  if (h < 1) return "منذ أقل من ساعة"
-  if (h < 24) return `منذ ${h} ساعة`
-  return `منذ ${Math.floor(h / 24)} يوم`
-}
 
 export default function MyListingsPage() {
   const { user, isLoading: authLoading } = useAuth()

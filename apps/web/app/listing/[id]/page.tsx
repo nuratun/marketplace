@@ -2,52 +2,17 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { apiFetch } from "@/lib/api"
+import { timeAgo, getInitials, categoryLabels } from "@/lib/utils"
 import { type Listing, type ListingsResponse } from "@/types/listing"
+import { Card } from "@/components/ui/Card"
+import { SectionLabel } from "@/components/ui/SectionLabel"
 import ListingGallery from "@/components/listing-gallery"
 import PhoneReveal from "@/components/phone-reveal"
 import ReportButton from "@/components/report-button"
 import ListingCard from "@/components/listing-card"
 import SaveButton from "@/components/save-button"
 
-const categoryLabels: Record<string, string> = {
-  "real-estate": "عقارات",
-  cars: "سيارات",
-  electronics: "إلكترونيات",
-  furniture: "أثاث ومنزل",
-  clothing: "ملابس",
-  jobs: "وظائف وخدمات"
-}
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const h = Math.floor(diff / 3600000)
-  if (h < 24) return `منذ ${h} ساعة`
-  return `منذ ${Math.floor(h / 24)} يوم`
-}
-
-function getInitials(name: string | null) {
-  if (!name) return "؟"
-  return name.split(" ").map((w) => w[0]).join("").slice(0, 2)
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="rounded-xl p-4 mb-4"
-      style={{ background: "#fff", border: "1px solid var(--color-border)" }}
-    >
-      {children}
-    </div>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs mb-3 font-medium" style={{ color: "var(--color-text-muted)" }}>
-      {children}
-    </p>
-  )
-}
 
 const conditionLabels: Record<string, string> = {
   new: "جديد",

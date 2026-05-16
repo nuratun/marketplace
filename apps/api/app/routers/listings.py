@@ -9,6 +9,7 @@ import uuid
 from app.db.session import get_db
 from app.models.listing import Listing
 from app.models.user import User
+from app.models.rating import Rating
 from app.core.dependencies import get_current_user, get_optional_user
 from app.models.saved_listing import SavedListing
 
@@ -243,6 +244,36 @@ def get_saved_listings(
             for l in ordered
             if l.user_id in sellers
         ]
+    }
+
+@router.get("/listings/{listing_id}/my-rating")
+def get_my_rating(
+    listing_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rating = (
+        db.query(Rating)
+        .filter(
+            Rating.listing_id == listing_id,
+            Rating.rater_id == current_user.id,
+        )
+        .first()
+    )
+    if not rating:
+        return {"rating": None}
+    return {
+        "rating": {
+            "id": str(rating.id),
+            "listing_id": str(rating.listing_id),
+            "rater_id": str(rating.rater_id),
+            "ratee_id": str(rating.ratee_id),
+            "role": rating.role,
+            "score": rating.score,
+            "recommended": rating.recommended,
+            "created_at": rating.created_at.isoformat(),
+            "rater_name": None,  # it's the current user — not needed
+        }
     }
 
 @router.get("/{listing_id}")

@@ -102,12 +102,14 @@ shamna/
 │   │   │   │   ├── otp.py          ← OTPCode model
 │   │   │   │   ├── listing.py      ← Listing model
 │   │   │   │   ├── saved_listing.py ← SavedListing model (user_saved_listings table)
-│   │   │   │   └── notification.py ← Notification, NotificationThread, NotificationMessage models + NotificationType enum
+│   │   │   │   ├── notification.py ← Notification, NotificationThread, NotificationMessage models + NotificationType enum
+│   │   │   │   └── rating.py       ← Rating model — ratings table with all constraints
 │   │   │   ├── routers/
 │   │   │   │   ├── auth.py         ← /auth/* endpoints including /auth/me (GET + PUT)
 │   │   │   │   ├── listings.py     ← /listings CRUD + /listings/mine + /listings/saved + save/unsave + phone reveal + delete
 │   │   │   │   ├── uploads.py      ← /uploads/presign + /uploads/presign-profile
-│   │   │   │   └── notifications.py ← /notifications + /admin/notifications endpoints
+│   │   │   │   ├── notifications.py ← /notifications + /admin/notifications endpoints
+│   │   │   │   └── ratings.py      ← POST /listings/{id}/rate + GET /users/{id}/ratings + GET /users/{id}/ratings/summary
 │   │   │   └── main.py             ← FastAPI app, CORS, router registration
 │   │   ├── alembic/
 │   │   │   └── env.py              ← imports all models for autogenerate detection
@@ -286,7 +288,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 
 | Table | Description |
 |---|---|
-| `users` | id, phone, name, email, bio, profile_pic, user_type, standing, warning_reason, is_active, is_admin, created_at |
+| `users` | id, phone, name, email, bio, profile_pic, user_type, standing, warning_reason, is_active, is_admin, average_rating, rating_count, created_at |
 | `otp_codes` | phone, code, used, expires_at, created_at |
 | `listings` | Full listing record — see columns below |
 | `user_saved_listings` | user_id, listing_id, created_at — unique constraint on (user_id, listing_id) |
@@ -309,6 +311,8 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `warning_reason` | String | Nullable — populated when standing is warned/suspended |
 | `is_active` | Boolean | Default true |
 | `is_admin` | Boolean | Default false — grants access to `/admin/*` endpoints |
+| `average_rating` | Numeric(3,2) | Nullable — denormalized avg score, updated after each new rating |
+| `rating_count` | Integer | Default 0 — denormalized count, updated after each new rating |
 | `created_at` | DateTime | |
 
 ### Listings table columns
@@ -378,6 +382,22 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `sender_is_admin` | Boolean | True = admin sent, False = user sent |
 | `created_at` | DateTime | |
 
+### ratings table columns
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `listing_id` | UUID | FK → listings.id, CASCADE delete, indexed — the sold listing that triggered the rating |
+| `rater_id` | UUID | FK → users.id, CASCADE delete — who is leaving the rating |
+| `ratee_id` | UUID | FK → users.id, CASCADE delete, indexed — who is being rated (always the listing owner) |
+| `role` | String(10) | `"buyer"` or `"seller"` — the rater's role in the transaction |
+| `score` | SmallInt | 1–5 stars |
+| `recommended` | Boolean | Would recommend this user |
+| `created_at` | DateTime | |
+| — | UniqueConstraint | `(listing_id, rater_id)` — one rating per person per listing |
+| — | CheckConstraint | `rater_id != ratee_id` — cannot rate yourself |
+| — | CheckConstraint | `score BETWEEN 1 AND 5` |
+
 ### NotificationType enum
 
 | Value | Description |
@@ -405,6 +425,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `1.2_user_profile_fields` | Add bio, standing, warning_reason to users |
 | `add_user_saved_listings` | Add user_saved_listings join table |
 | `add_notifications_and_threads` | Add notifications, notification_threads, notification_messages tables + is_admin to users |
+| `001_add_ratings` | Add ratings table + average_rating and rating_count columns to users |
 
 ---
 
@@ -607,6 +628,56 @@ UPDATE users SET is_admin = true WHERE phone = '+963...';
 Authorization: Bearer <access_token>
 ```
 
+### Ratings endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/listings/{id}/rate` | Required | Submit a rating on a sold listing |
+| GET | `/users/{id}/ratings` | No | All ratings received by a user, newest first |
+| GET | `/users/{id}/ratings/summary` | No | Aggregate stats: avg score, total count, recommend % |
+
+> ⚠️ Route order note: `/listings/{id}/rate` is a POST so it doesn't conflict with `GET /listings/{id}` — no ordering concern here.
+
+**POST /listings/{id}/rate request:**
+```json
+{
+  "score": 4,
+  "recommended": true,
+  "role": "buyer"
+}
+```
+
+**POST /listings/{id}/rate errors:**
+- `400` — listing is not yet marked as sold
+- `400` — cannot rate your own listing
+- `409` — you have already rated this listing
+- `404` — listing not found
+
+**GET /users/{id}/ratings/summary response:**
+```json
+{
+  "total": 12,
+  "average_score": 4.58,
+  "recommend_pct": 91.7
+}
+```
+> `average_score` and `recommend_pct` are `null` when `total` is 0 (no ratings yet).
+
+**Rating object shape:**
+```json
+{
+  "id": "uuid",
+  "listing_id": "uuid",
+  "rater_id": "uuid",
+  "ratee_id": "uuid",
+  "role": "buyer",
+  "score": 4,
+  "recommended": true,
+  "created_at": "2026-05-16T...",
+  "rater_name": "أحمد"
+}
+```
+
 ---
 
 ## Key Architectural Decisions
@@ -689,6 +760,10 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 **Admin access — `is_admin` flag:** No separate admin login. Admins are regular users with `is_admin = true` on their `users` row. The `get_current_admin` FastAPI dependency checks this flag and raises 403 otherwise. Grant admin access via a direct SQL update in Supabase.
 
+**Ratings — open model (no buyer tracking):** Any authenticated user can rate a seller on a sold listing, one rating per person per listing. We don't track who the buyer was (no checkout/offer flow exists yet), so locking rating to a specific buyer isn't possible. The constraint is enforced by a `UNIQUE(listing_id, rater_id)` index — double-submitting returns a clean 409. The ratee is always the listing owner (seller). Tighten this to buyer-only once a messaging/offer flow is added.
+
+**Ratings — denormalized stats on users:** `average_rating` (Numeric 3,2) and `rating_count` (Integer) are stored directly on the `users` row and updated by `_refresh_user_stats()` after every new rating. This avoids an aggregate query across the `ratings` table every time a profile page loads. The tradeoff is that these values are eventually consistent by one write — acceptable for a marketplace context.
+
 **Alembic NOT NULL column gotcha:** Adding a `NOT NULL` column to a table with existing rows requires a `server_default` in the migration. Alembic autogenerate does not add this automatically. Always inspect generated migration files and add `server_default='false'` (or appropriate default) to `op.add_column()` calls for boolean columns on existing tables.
 
 ---
@@ -750,7 +825,11 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 | Notifications — thread detail view with reply box | ✅ Done |
 | Notifications — unread bell badge on navbar | ✅ Done |
 | Notifications — notification.ts types file | ✅ Done |
-| Ratings system | ⏳ Planned — Phase 2 |
+| Profile page — apiFetch Content-Type bug fixed (spread order) | ✅ Done — `{ headers, ...rest }` destructure pattern prevents options spread clobbering merged headers |
+| Ratings — ratings table migration (+ average_rating, rating_count on users) | ✅ Done |
+| Ratings — Rating model (rating.py) | ✅ Done |
+| Ratings — ratings.py router (POST /listings/{id}/rate, GET /users/{id}/ratings, GET /users/{id}/ratings/summary) | ✅ Done |
+| Ratings — frontend UI (profile page star display, rate modal) | ⏳ Next session |
 | Automated notifications (welcome, expiry warnings, price drops) | ⏳ Planned — needs Redis + BullMQ |
 | Meilisearch integration | ⏳ Planned |
 | Redis + BullMQ | ⏳ Planned |
@@ -777,8 +856,9 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 - [x] My listings page (view, mark sold, delete)
 - [x] Saved listings (heart button on cards + detail page, `/saved` page)
 - [x] Notifications (admin broadcast + two-way threads + system event types, bell badge, `/notifications` page)
+- [x] Ratings backend (ratings table, rating.py model, ratings.py router — 3 endpoints)
+- [ ] Ratings frontend (star display on profile, rate modal triggered from sold listings)
 - [ ] Search (Meilisearch)
-- [ ] Ratings system
 
 ### Phase 2 — Pre-launch
 - [ ] Migrate Railway → Hetzner + Coolify
@@ -797,14 +877,33 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 ## Next Session
 
-### Search — Meilisearch integration
-The next major feature. Needs:
-- Meilisearch instance (self-hosted on Hetzner, or Meilisearch Cloud for dev)
-- Index sync: new/updated/deleted listings pushed to Meilisearch
-- Arabic full-text search settings (language tokenizer, stopwords, ranking rules)
-- `GET /search?q=` endpoint wired to Meilisearch
-- Search bar in the navbar/hero
-- Search results page
+### Ratings frontend
+Backend is fully wired. Frontend deliverables:
+
+- **`apps/web/types/rating.ts`** — `Rating`, `RatingSummary` types matching the API shapes
+- **Star display on profile page** — show average score + total count on `GET /users/{id}/ratings/summary`; render filled/half/empty stars inline on the profile header card
+- **Ratings list on profile** — collapsible section or tab showing individual `Rating` objects from `GET /users/{id}/ratings` (rater name, score, role badge, recommend pill, timestamp)
+- **Rate modal** — triggered from `/my-listings` when a listing is marked as sold; or from the listing detail page when `status === "sold"` and the viewer is not the owner; posts to `POST /listings/{id}/rate`
+- **`apps/web/types/rating.ts`** should include:
+  ```ts
+  export type Rating = {
+    id: string
+    listing_id: string
+    rater_id: string
+    ratee_id: string
+    role: "buyer" | "seller"
+    score: number          // 1–5
+    recommended: boolean
+    created_at: string
+    rater_name: string | null
+  }
+
+  export type RatingSummary = {
+    total: number
+    average_score: number | null
+    recommend_pct: number | null
+  }
+  ```
 
 ### Automated notifications (when Redis + BullMQ are live)
 The notification infrastructure is in place. Automated triggers to wire up later:
@@ -815,7 +914,10 @@ The notification infrastructure is in place. Automated triggers to wire up later
 - `SAVED_PRICE_DROP` — hook into listing update endpoint
 - `SAVED_LISTING_SOLD` / `SAVED_LISTING_REMOVED` — hook into status/delete endpoints
 
-### Ratings system
-- `ratings` table (reviewer_id, reviewee_id, listing_id, score, comment)
-- Post-transaction review flow
-- Aggregate score displayed on profile page
+### Search — Meilisearch integration
+- Meilisearch instance (self-hosted on Hetzner, or Meilisearch Cloud for dev)
+- Index sync: new/updated/deleted listings pushed to Meilisearch
+- Arabic full-text search settings (language tokenizer, stopwords, ranking rules)
+- `GET /search?q=` endpoint wired to Meilisearch
+- Search bar in the navbar/hero
+- Search results page
