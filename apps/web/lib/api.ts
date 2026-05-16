@@ -12,13 +12,15 @@ export async function apiFetch<T>(
   options?: RequestInit
 ): Promise<T> {
   const base = getApiBaseUrl()
+  const { headers, ...rest } = options ?? {}
+
   const res = await fetch(`${base}${path}`, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...options?.headers,
+      ...headers
     },
-    ...options
+    ...rest  
   })
 
   if (!res.ok) {
