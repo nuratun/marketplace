@@ -32,6 +32,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 - Image uploads per listing and profile photos (Cloudflare R2 — live)
 - My Listings page — view, mark as sold, delete your own listings
 - Save/unsave listings — heart button on cards and detail pages, `/saved` page
+- Notifications — admin broadcasts, two-way admin ↔ user threads, system events (expiry, phone reveal, saved listing changes, account standing)
 - Mobile app (React Native) planned for phase 2
 - Business/advertiser login planned for a later phase
 
@@ -49,7 +50,7 @@ Shamna is a Sahibinden/Craigslist-style classifieds platform built specifically 
 | **Mobile** | React Native + Expo | Phase 2 |
 | **Primary Database** | PostgreSQL (Supabase) | Free tier during dev, session pooler for IPv4 compatibility |
 | **Search** | Meilisearch | Arabic full-text search — planned |
-| **Cache / Queue** | Redis + BullMQ | Planned |
+| **Cache / Queue** | Redis + BullMQ | Planned — needed for automated notification triggers (expiry warnings, welcome messages) |
 | **Object Storage** | Cloudflare R2 | Live — presigned URL upload, direct browser → R2 |
 | **Auth** | Custom JWT + OTP (phone-based) | Access tokens (15 min, localStorage) + refresh tokens in httpOnly cookies (30 days) |
 | **Package Manager (API)** | uv | Fast Python package manager — always use `uv add` never `pip install` |
@@ -97,14 +98,16 @@ shamna/
 │   │   │   │   ├── base.py         ← SQLAlchemy DeclarativeBase only — no model imports
 │   │   │   │   └── session.py      ← engine, SessionLocal, get_db
 │   │   │   ├── models/
-│   │   │   │   ├── user.py         ← User model (Mapped style)
+│   │   │   │   ├── user.py         ← User model (Mapped style) — includes is_admin bool
 │   │   │   │   ├── otp.py          ← OTPCode model
 │   │   │   │   ├── listing.py      ← Listing model
-│   │   │   │   └── saved_listing.py ← SavedListing model (user_saved_listings table)
+│   │   │   │   ├── saved_listing.py ← SavedListing model (user_saved_listings table)
+│   │   │   │   └── notification.py ← Notification, NotificationThread, NotificationMessage models + NotificationType enum
 │   │   │   ├── routers/
 │   │   │   │   ├── auth.py         ← /auth/* endpoints including /auth/me (GET + PUT)
 │   │   │   │   ├── listings.py     ← /listings CRUD + /listings/mine + /listings/saved + save/unsave + phone reveal + delete
-│   │   │   │   └── uploads.py      ← /uploads/presign + /uploads/presign-profile
+│   │   │   │   ├── uploads.py      ← /uploads/presign + /uploads/presign-profile
+│   │   │   │   └── notifications.py ← /notifications + /admin/notifications endpoints
 │   │   │   └── main.py             ← FastAPI app, CORS, router registration
 │   │   ├── alembic/
 │   │   │   └── env.py              ← imports all models for autogenerate detection
@@ -120,6 +123,8 @@ shamna/
 │   │   │   │   └── page.tsx        ← View all own listings, mark as sold, delete
 │   │   │   ├── saved/              ← Saved listings page
 │   │   │   │   └── page.tsx        ← Grid of saved listings, empty state, auth-gated
+│   │   │   ├── notifications/      ← Notifications page
+│   │   │   │   └── page.tsx        ← Two tabs: flat notifications + two-way message threads
 │   │   │   ├── post/               ← Multi-step post an ad wizard
 │   │   │   │   └── page.tsx        ← Owns all form state, handles submit to /listings
 │   │   │   ├── profile/            ← User profile page (inline editable fields)
@@ -130,7 +135,7 @@ shamna/
 │   │   ├── components/
 │   │   │   ├── post/               ← step-indicator, step-category, step-details,
 │   │   │   │                          step-photos, step-review
-│   │   │   ├── navbar.tsx          ← Auth-aware: logged-out = two buttons; logged-in = icon row + avatar dropdown
+│   │   │   ├── navbar.tsx          ← Auth-aware: logged-out = two buttons; logged-in = icon row (Bell/Heart/ClipboardList) + avatar dropdown; bell shows unread badge
 │   │   │   ├── footer.tsx
 │   │   │   ├── hero.tsx            ← 3-panel layout: category sidebar (hover) + animated banner + post-ad promo card
 │   │   │   ├── category-section.tsx ← Per-category block: colored feature card + 2×4 mini listing grid
@@ -148,8 +153,9 @@ shamna/
 │   │   │   └── api.ts              ← apiFetch, getAuthHeaders, getApiBaseUrl
 │   │   ├── types/
 │   │   │   ├── listing.ts          ← Listing, Seller, ListingsResponse types
-│   │   │   └── post.ts             ← PostFormData, EMPTY_POST_FORM
-│   │   └── middleware.ts           ← Protects /post, /profile, /my-listings, /saved routes
+│   │   │   ├── post.ts             ← PostFormData, EMPTY_POST_FORM
+│   │   │   └── notification.ts     ← Notification, NotificationThread, NotificationMessage, NotificationType, UnreadCount types
+│   │   └── middleware.ts           ← Protects /post, /profile, /my-listings, /saved, /notifications routes
 │   └── mobile/                     ← React Native stub (phase 2)
 ├── .github/
 │   └── workflows/
@@ -270,6 +276,8 @@ uv run alembic revision --autogenerate -m "describe your change"
 uv run alembic upgrade head
 ```
 
+> **Adding NOT NULL columns to existing tables:** Alembic autogenerate will produce `ADD COLUMN col BOOLEAN NOT NULL` with no default, which Postgres rejects when rows already exist. Fix by adding `server_default='false'` (or the appropriate default) to the generated `op.add_column()` call before running `upgrade head`.
+
 ### CI migrations
 
 Trigger manually from **GitHub → Actions → Run DB Migrations**.
@@ -278,10 +286,13 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 
 | Table | Description |
 |---|---|
-| `users` | id, phone, name, email, bio, profile_pic, user_type, standing, warning_reason, is_active, created_at |
+| `users` | id, phone, name, email, bio, profile_pic, user_type, standing, warning_reason, is_active, is_admin, created_at |
 | `otp_codes` | phone, code, used, expires_at, created_at |
 | `listings` | Full listing record — see columns below |
 | `user_saved_listings` | user_id, listing_id, created_at — unique constraint on (user_id, listing_id) |
+| `notifications` | Flat one-way notifications (system events + admin broadcasts) |
+| `notification_threads` | Two-way admin ↔ user conversation threads |
+| `notification_messages` | Individual messages inside a thread |
 
 ### Users table columns
 
@@ -297,6 +308,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `standing` | String | `"good"` \| `"warned"` \| `"suspended"` — default `"good"` |
 | `warning_reason` | String | Nullable — populated when standing is warned/suspended |
 | `is_active` | Boolean | Default true |
+| `is_admin` | Boolean | Default false — grants access to `/admin/*` endpoints |
 | `created_at` | DateTime | |
 
 ### Listings table columns
@@ -330,6 +342,61 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `created_at` | DateTime | |
 | — | UniqueConstraint | `(user_id, listing_id)` — one save per user per listing |
 
+### notifications table columns
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | FK → users.id, CASCADE delete, indexed |
+| `type` | Enum (NotificationType) | See enum below |
+| `title` | String(200) | |
+| `body` | Text | |
+| `listing_id` | UUID | Nullable FK → listings.id, SET NULL on delete |
+| `is_read` | Boolean | Default false |
+| `created_at` | DateTime | |
+
+### notification_threads table columns
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | FK → users.id, CASCADE delete, indexed |
+| `subject` | String(300) | |
+| `type` | Enum (NotificationType) | |
+| `is_noreply` | Boolean | Default false — when true, user cannot reply |
+| `user_has_unread` | Boolean | Default true — drives bell badge count |
+| `created_at` | DateTime | |
+| `updated_at` | DateTime | Bumped on every new message — used for sorting |
+
+### notification_messages table columns
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `thread_id` | UUID | FK → notification_threads.id, CASCADE delete, indexed |
+| `body` | Text | |
+| `sender_is_admin` | Boolean | True = admin sent, False = user sent |
+| `created_at` | DateTime | |
+
+### NotificationType enum
+
+| Value | Description |
+|---|---|
+| `ADMIN_BROADCAST` | Admin → all or selected users, always one-way (flat notification) |
+| `ADMIN_MESSAGE` | Admin → user, starts a two-way thread |
+| `LISTING_EXPIRING_SOON` | System — 3 days before `expires_at` |
+| `LISTING_EXPIRED` | System — on `expires_at` |
+| `LISTING_REMOVED` | System/admin — listing removed by admin |
+| `LISTING_PHONE_REVEALED` | System — someone revealed your phone number |
+| `WELCOME` | System — sent to new users on registration |
+| `ACCOUNT_WARNING` | System/admin — standing changed to warned |
+| `ACCOUNT_SUSPENDED` | System/admin — standing changed to suspended |
+| `ACCOUNT_REINSTATED` | System/admin — standing restored to good |
+| `SAVED_PRICE_DROP` | System — price changed on a saved listing |
+| `SAVED_LISTING_SOLD` | System — saved listing marked as sold |
+| `SAVED_LISTING_REMOVED` | System — saved listing deleted |
+| `RATING_RECEIVED` | System — someone rated you (phase 2) |
+
 ### Migration history
 
 | Revision | Description |
@@ -337,6 +404,7 @@ Trigger manually from **GitHub → Actions → Run DB Migrations**.
 | `8a5d4dc3c4c1` | Initial — users, otp_codes, listings tables |
 | `1.2_user_profile_fields` | Add bio, standing, warning_reason to users |
 | `add_user_saved_listings` | Add user_saved_listings join table |
+| `add_notifications_and_threads` | Add notifications, notification_threads, notification_messages tables + is_admin to users |
 
 ---
 
@@ -399,7 +467,7 @@ Interactive docs: `https://railway.shamna.shop/docs`
 | POST | `/listings/{id}/save` | Required | Save a listing (idempotent) |
 | DELETE | `/listings/{id}/save` | Required | Unsave a listing |
 
-> ⚠️ Route order matters in FastAPI: `/listings/mine` and `/listings/saved` must be registered **before** `/listings/{id}` in `listings.py`, otherwise the literal strings `"mine"` and `"saved"` are matched as listing IDs and return 404s.
+> ⚠️ Route order matters in FastAPI: `/listings/mine` and `/listings/saved` must be registered **before** `/listings/{id}` in `listings.py`, otherwise the literal strings `"mine"` and `"saved"` are matched as listing IDs and return 404s. The same rule applies in `notifications.py` — `/notifications/read-all`, `/notifications/threads`, and `/notifications/unread-count` must appear before `/notifications/{id}` and `/notifications/threads/{id}`.
 
 **GET /listings query params:**
 
@@ -487,6 +555,53 @@ Interactive docs: `https://railway.shamna.shop/docs`
 
 > Listing images keyed as `listings/{user_id}/{uuid}.ext`. Profile pics keyed as `profiles/{user_id}.ext` — re-uploads overwrite the previous pic automatically.
 
+### Notification endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/notifications` | Required | Current user's flat notifications, newest first |
+| GET | `/notifications/unread-count` | Required | Unread counts for bell badge (`unread_notifications`, `unread_threads`, `total`) |
+| PATCH | `/notifications/read-all` | Required | Mark all flat notifications as read |
+| PATCH | `/notifications/{id}/read` | Required | Mark one flat notification as read |
+| GET | `/notifications/threads` | Required | User's thread summaries, newest-updated first |
+| GET | `/notifications/threads/{id}` | Required | Full thread with all messages — marks thread as read |
+| POST | `/notifications/threads/{id}/reply` | Required | User replies to a thread (403 if `is_noreply=true`) |
+| POST | `/admin/notifications/broadcast` | Admin only | Send flat notification to all or selected users |
+| POST | `/admin/notifications/threads` | Admin only | Start a two-way thread with a user |
+| POST | `/admin/notifications/threads/{id}/reply` | Admin only | Admin replies in an existing thread |
+
+**GET /notifications/unread-count response:**
+```json
+{ "unread_notifications": 3, "unread_threads": 1, "total": 4 }
+```
+
+**POST /admin/notifications/broadcast request:**
+```json
+{
+  "type": "ADMIN_BROADCAST",
+  "title": "تحديث مهم",
+  "body": "سيتوقف الموقع عن العمل مؤقتاً للصيانة.",
+  "user_ids": null
+}
+```
+> `user_ids: null` sends to all active users. Pass an array of UUIDs to target specific users.
+
+**POST /admin/notifications/threads request:**
+```json
+{
+  "user_id": "uuid",
+  "subject": "مراجعة الإعلان",
+  "type": "ADMIN_MESSAGE",
+  "body": "لاحظنا بعض المخالفات في إعلانك، نرجو التوضيح.",
+  "is_noreply": false
+}
+```
+
+**Admin auth:** Requires `is_admin = true` on the user record. Grant via SQL:
+```sql
+UPDATE users SET is_admin = true WHERE phone = '+963...';
+```
+
 **Authorization for protected endpoints:**
 ```
 Authorization: Bearer <access_token>
@@ -526,7 +641,7 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 **Next.js image domains:** The `next.config.js` `images.remotePatterns` must include the R2 public hostname (`media.shamna.shop`) for `<Image>` to render R2-hosted photos. Without this, Next.js blocks the image and renders a broken icon.
 
-**`/listings/mine` and `/listings/saved` endpoint ordering:** In FastAPI, routes are matched in registration order. `GET /listings/mine` and `GET /listings/saved` must appear in `listings.py` **before** `GET /listings/{listing_id}`, otherwise the literal strings `"mine"` and `"saved"` are interpreted as UUID listing IDs and return 404s.
+**`/listings/mine` and `/listings/saved` endpoint ordering:** In FastAPI, routes are matched in registration order. `GET /listings/mine` and `GET /listings/saved` must appear in `listings.py` **before** `GET /listings/{listing_id}`, otherwise the literal strings `"mine"` and `"saved"` are interpreted as UUID listing IDs and return 404s. The same principle applies to notifications: `/notifications/read-all`, `/notifications/threads`, and `/notifications/unread-count` must be registered before `/notifications/{id}` and `/notifications/threads/{id}`.
 
 **My Listings page — client component:** `/my-listings/page.tsx` is a client component (not server) because it needs `localStorage` access for the auth token header, and requires interactive optimistic UI updates (instant removal on delete, instant status badge change on mark-as-sold) without a page reload.
 
@@ -538,7 +653,7 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 **`db/base.py` — models must NOT be imported here:** `base.py` only defines `DeclarativeBase`. Model imports belong in `alembic/env.py` (for autogenerate detection), not in `base.py`. Importing models in `base.py` creates a circular import: `user.py` imports `Base` from `base.py`, and if `base.py` imports `User` from `user.py`, Python partially initializes `user.py` before `Base` is defined — crashing with `ImportError: cannot import name 'User' from partially initialized module`.
 
-**SQLAlchemy 2.x `Mapped` style:** User model uses `Mapped[type]` + `mapped_column()` annotations instead of the legacy `Column()` style. This is required for Pylance to correctly type-check attribute assignments (e.g. `user.name = "Ahmed"` without errors). New models (`SavedListing`) follow the same `Mapped` style for consistency.
+**SQLAlchemy 2.x `Mapped` style:** User model uses `Mapped[type]` + `mapped_column()` annotations instead of the legacy `Column()` style. This is required for Pylance to correctly type-check attribute assignments (e.g. `user.name = "Ahmed"` without errors). New models (`SavedListing`, `Notification`, `NotificationThread`, `NotificationMessage`) follow the same `Mapped` style for consistency.
 
 **`__table_args__` with a single constraint:** When `__table_args__` is a tuple containing constraints (e.g. `UniqueConstraint`), SQLAlchemy requires an empty dict `{}` as the last element of the tuple — e.g. `(UniqueConstraint(...), {})`. Without it, SQLAlchemy raises `ArgumentError: __table_args__ value must be a tuple, dict, or None`.
 
@@ -568,7 +683,13 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 **Category mini-grid images:** `category-section.tsx` uses `listing.image_urls?.[0]` (not `listing.images?.[0]`) to render listing thumbnails — the API returns `image_urls`. Using the wrong field silently falls through to the emoji fallback.
 
-**Navbar auth states:** Logged-out shows two buttons (Post an Ad → `/auth?from=/post`, Login → `/auth?from={pathname}`). Logged-in replaces both with an icon row: Bell (`/notifications`), Heart (`/saved`), ClipboardList (`/my-listings`), and avatar circle with dropdown (profile, my listings, logout).
+**Navbar auth states:** Logged-out shows two buttons (Post an Ad → `/auth?from=/post`, Login → `/auth?from={pathname}`). Logged-in replaces both with an icon row: Bell (`/notifications`), Heart (`/saved`), ClipboardList (`/my-listings`), and avatar circle with dropdown (profile, my listings, logout). The bell icon shows an unread badge driven by `GET /notifications/unread-count`.
+
+**Notification architecture — two data models:** Flat `notifications` table for one-way system events and admin broadcasts. Separate `notification_threads` + `notification_messages` tables for two-way admin ↔ user conversations. Keeping them separate avoids hacking replies into a flat table. `is_noreply` on a thread prevents user replies while still using the thread UI (rare, but supported). The `user_has_unread` boolean on threads is the cheap flag used for the bell badge count — avoids a message join on every page load.
+
+**Admin access — `is_admin` flag:** No separate admin login. Admins are regular users with `is_admin = true` on their `users` row. The `get_current_admin` FastAPI dependency checks this flag and raises 403 otherwise. Grant admin access via a direct SQL update in Supabase.
+
+**Alembic NOT NULL column gotcha:** Adding a `NOT NULL` column to a table with existing rows requires a `server_default` in the migration. Alembic autogenerate does not add this automatically. Always inspect generated migration files and add `server_default='false'` (or appropriate default) to `op.add_column()` calls for boolean columns on existing tables.
 
 ---
 
@@ -622,9 +743,15 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 | Saved listings — heart overlay on listing cards (category page) | ✅ Done |
 | Saved listings — full save button on listing detail page | ✅ Done |
 | Saved listings — /saved page with empty state | ✅ Done |
-| Ratings system | ⏳ Planned — Phase 1 Profile Phase 2 |
-| Notifications (bell icon + list) | ⏳ Planned — Phase 1 Profile Phase 2 |
-| Notifications page `/notifications` | ⏳ Planned |
+| Notifications — is_admin field on users + migration | ✅ Done |
+| Notifications — notification.py model (3 tables + NotificationType enum) | ✅ Done |
+| Notifications — notifications.py router (all user + admin endpoints) | ✅ Done |
+| Notifications — /notifications page (two tabs: flat + threads) | ✅ Done |
+| Notifications — thread detail view with reply box | ✅ Done |
+| Notifications — unread bell badge on navbar | ✅ Done |
+| Notifications — notification.ts types file | ✅ Done |
+| Ratings system | ⏳ Planned — Phase 2 |
+| Automated notifications (welcome, expiry warnings, price drops) | ⏳ Planned — needs Redis + BullMQ |
 | Meilisearch integration | ⏳ Planned |
 | Redis + BullMQ | ⏳ Planned |
 | React Native mobile app | ⏳ Phase 2 |
@@ -649,13 +776,14 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 - [x] Custom domain (`www.shamna.shop` + `railway.shamna.shop`) — fully resolves middleware auth
 - [x] My listings page (view, mark sold, delete)
 - [x] Saved listings (heart button on cards + detail page, `/saved` page)
-- [ ] Notifications page (`/notifications`)
-- [ ] Profile page Phase 2 (ratings, notifications, saved tab)
+- [x] Notifications (admin broadcast + two-way threads + system event types, bell badge, `/notifications` page)
 - [ ] Search (Meilisearch)
+- [ ] Ratings system
 
 ### Phase 2 — Pre-launch
 - [ ] Migrate Railway → Hetzner + Coolify
 - [ ] Self-host Meilisearch + Redis
+- [ ] Automated notifications (welcome message, expiry warnings, price drop alerts) via BullMQ
 - [ ] Image moderation pipeline
 - [ ] Mobile app (React Native + Expo)
 - [ ] Remove OTP dev bypass, wire real SMS provider
@@ -669,17 +797,25 @@ Both cookies use `domain=".shamna.shop"` so they are scoped to the entire root d
 
 ## Next Session
 
-### Notifications page `/notifications`
-Linked in the navbar icon row but no page exists yet. Needs:
-- A `notifications` table migration (id, user_id, type, message, read, created_at)
-- `GET /notifications` endpoint (current user's notifications, newest first)
-- `PATCH /notifications/{id}/read` or a bulk mark-all-read endpoint
-- Unread count badge on the bell icon in the navbar
-- The page itself: list of notifications with read/unread state, empty state
+### Search — Meilisearch integration
+The next major feature. Needs:
+- Meilisearch instance (self-hosted on Hetzner, or Meilisearch Cloud for dev)
+- Index sync: new/updated/deleted listings pushed to Meilisearch
+- Arabic full-text search settings (language tokenizer, stopwords, ranking rules)
+- `GET /search?q=` endpoint wired to Meilisearch
+- Search bar in the navbar/hero
+- Search results page
 
-### Profile page Phase 2
-Two features deferred from the initial profile page build — each needs its own migration + endpoints + UI:
-- **Ratings** — `ratings` table, post-transaction review flow, aggregate score on profile
-- **Notifications** — notification list on profile, unread count in navbar
+### Automated notifications (when Redis + BullMQ are live)
+The notification infrastructure is in place. Automated triggers to wire up later:
+- `WELCOME` — send on user creation (hook into `/auth/verify-otp`)
+- `LISTING_EXPIRING_SOON` — BullMQ scheduled job, 3 days before `expires_at`
+- `LISTING_EXPIRED` — BullMQ scheduled job, on `expires_at`
+- `LISTING_PHONE_REVEALED` — hook into `GET /listings/{id}/phone`
+- `SAVED_PRICE_DROP` — hook into listing update endpoint
+- `SAVED_LISTING_SOLD` / `SAVED_LISTING_REMOVED` — hook into status/delete endpoints
 
-> Note: Saved listings tab on the profile page can now pull from `GET /listings/saved` — the backend is already in place.
+### Ratings system
+- `ratings` table (reviewer_id, reviewee_id, listing_id, score, comment)
+- Post-transaction review flow
+- Aggregate score displayed on profile page

@@ -39,6 +39,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "bio": current_user.bio,
         "standing": current_user.standing,
         "warning_reason": current_user.warning_reason,
+        "average_rating": float(current_user.average_rating) if current_user.average_rating else None,"rating_count": current_user.rating_count,
         "user_type": current_user.user_type,
         "created_at": current_user.created_at.isoformat()
     }
@@ -67,6 +68,8 @@ def update_me(
         "user_type": current_user.user_type,
         "standing": current_user.standing,
         "warning_reason": current_user.warning_reason,
+        "average_rating": current_user.average_rating,
+        "rating_count": current_user.rating_count,
         "created_at": current_user.created_at.isoformat()
     }
 
@@ -156,6 +159,8 @@ def verify_otp(body: OTPVerifyRequest, response: Response, db: Session = Depends
             "bio": user.bio,
             "standing": user.standing,
             "warning_reason": user.warning_reason,
+            "average_rating": user.average_rating,
+            "rating_count": user.rating_count,
             "user_type": user.user_type,
             "created_at": user.created_at.isoformat()
         }

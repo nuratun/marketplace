@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.db.session import SessionLocal
-from app.routers import auth, listings, notifications, uploads
+from app.routers import auth, listings, notifications, uploads, ratings
 
 app = FastAPI(title="شامنا API")
 
@@ -23,6 +23,7 @@ app.include_router(auth.router)
 app.include_router(listings.router)
 app.include_router(uploads.router)
 app.include_router(notifications.router, prefix="")
+app.include_router(ratings.router)
 
 @app.get("/health")
 def health():
