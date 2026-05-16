@@ -1,8 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
-import { type HeroCategory } from "@/components/hero"
-
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -22,6 +20,15 @@ export function timeAgo(dateStr: string): string {
 export function getInitials(name: string | null) {
   if (!name) return "؟"
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2)
+}
+
+export const categoryIcons: Record<string, { icon: string; color: string }> = {
+  "real-estate": { icon: "🏠", color: "#FFF0E6" },
+  cars: { icon: "🚗", color: "#E6F0FF" },
+  electronics: { icon: "📱", color: "#E6FAF0" },
+  furniture: { icon: "🛋️", color: "#FFF8E6" },
+  clothing: { icon: "👗", color: "#F9E6FF" },
+  jobs: { icon: "💼", color: "#E6FFF6" }
 }
 
 export const categoryLabels: Record<string, string> = {

@@ -7,10 +7,10 @@ import { type Listing, type ListingsResponse } from "@/types/listing"
 import { Card } from "@/components/ui/Card"
 import { SectionLabel } from "@/components/ui/SectionLabel"
 import ListingGallery from "@/components/listing-gallery"
-import PhoneReveal from "@/components/phone-reveal"
-import ReportButton from "@/components/report-button"
+import PhoneReveal from "@/components/ui/PhoneReveal"
+import ReportButton from "@/components/ui/ReportButton"
 import ListingCard from "@/components/listing-card"
-import SaveButton from "@/components/save-button"
+import SaveButton from "@/components/ui/SaveButton"
 
 
 

@@ -1,21 +1,6 @@
 import Link from "next/link"
+import { categoryIcons, timeAgo } from "@/lib/utils"
 import { Listing } from "@/types/listing"
-
-const categoryIcons: Record<string, { icon: string; color: string }> = {
-  "real-estate": { icon: "🏠", color: "#FFF0E6" },
-  cars: { icon: "🚗", color: "#E6F0FF" },
-  electronics: { icon: "📱", color: "#E6FAF0" },
-  furniture: { icon: "🛋️", color: "#FFF8E6" },
-  clothing: { icon: "👗", color: "#F9E6FF" },
-  jobs: { icon: "💼", color: "#E6FFF6" }
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const h = Math.floor(diff / 3600000)
-  if (h < 24) return `منذ ${h} ساعة`
-  return `منذ ${Math.floor(h / 24)} يوم`
-}
 
 export default function ListingListCard({ listing }: { listing: Listing }) {
   const meta = categoryIcons[listing.category] ?? { icon: "📦", color: "#F1EFE8" }

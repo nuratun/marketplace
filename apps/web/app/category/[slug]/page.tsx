@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import { Listing, type ListingsResponse } from "@/types/listing"
 import CategoryFilters from "@/components/category-filters"
-import ViewToggle from "@/components/view-toggle"
+import ViewToggle from "@/components/ui/ViewToggle"
 import ListingCard from "@/components/listing-card"
 import ListingListCard from "@/components/listing-list-card"
 

@@ -1,31 +1,7 @@
 import Link from "next/link"
+import { categoryLabels, categoryIcons, timeAgo } from "@/lib/utils"
 import { Listing } from "@/types/listing"
-import SaveButton from "@/components/save-button"
-
-const categoryIcons: Record<string, { icon: string; color: string }> = {
-  "real-estate": { icon: "🏠", color: "#FFF0E6" },
-  cars: { icon: "🚗", color: "#E6F0FF" },
-  electronics: { icon: "📱", color: "#E6FAF0" },
-  furniture: { icon: "🛋️", color: "#FFF8E6" },
-  clothing: { icon: "👗", color: "#F9E6FF" },
-  jobs: { icon: "💼", color: "#E6FFF6" }
-}
-
-const categoryLabels: Record<string, string> = {
-  "real-estate": "عقارات",
-  cars: "سيارات",
-  electronics: "إلكترونيات",
-  furniture: "أثاث ومنزل",
-  clothing: "ملابس",
-  jobs: "وظائف وخدمات"
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const h = Math.floor(diff / 3600000)
-  if (h < 24) return `منذ ${h} ساعة`
-  return `منذ ${Math.floor(h / 24)} يوم`
-}
+import SaveButton from "@/components/ui/SaveButton"
 
 export default function ListingCard({ listing }: { listing: Listing }) {
   const meta = categoryIcons[listing.category] ?? { icon: "📦", color: "#F1EFE8" }
